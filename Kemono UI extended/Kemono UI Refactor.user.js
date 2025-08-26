@@ -10,7 +10,7 @@
 // @grant        GM_setValue
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     // --- MODULE: STATE & CONSTANTS --- //
@@ -52,7 +52,9 @@
             const overlay = document.getElementById('kui-debugger');
             if (!overlay) return;
             let content = '--- KUI DEBUGGER ---<br>';
-            for (const key in data) { content += `${key.padEnd(18, ' ')}: ${data[key]}<br>`; }
+            for (const key in data) {
+                content += `${key.padEnd(18, ' ')}: ${data[key]}<br>`;
+            }
             overlay.innerHTML = content;
             console.log('KUI DEBUGGER:', data);
         },
@@ -272,7 +274,10 @@
             if (!postBody || postBody.classList.contains('kui-processed')) return;
             const findNextProperSibling = (element) => {
                 let sibling = element.nextElementSibling;
-                while (sibling) { if (sibling.tagName !== 'SCRIPT') return sibling; sibling = sibling.nextElementSibling; }
+                while (sibling) {
+                    if (sibling.tagName !== 'SCRIPT') return sibling;
+                    sibling = sibling.nextElementSibling;
+                }
                 return null;
             };
             const wrapGroup = (h2, content, customClass = '') => {
@@ -307,7 +312,10 @@
             if (!videoSection || videoSection.classList.contains('kui-video-gallery-processed')) return;
             const originalList = videoSection.querySelector('ul');
             if (!originalList) return;
-            const videosData = Array.from(originalList.querySelectorAll('li')).map(item => ({ title: item.querySelector('summary')?.textContent || 'Untitled Video', src: item.querySelector('video > source')?.src })).filter(video => video.src);
+            const videosData = Array.from(originalList.querySelectorAll('li')).map(item => ({
+                title: item.querySelector('summary')?.textContent || 'Untitled Video',
+                src: item.querySelector('video > source')?.src
+            })).filter(video => video.src);
             if (videosData.length <= 1) return;
             videoSection.classList.add('kui-video-gallery-processed');
             const galleryLayout = document.createElement('div');
@@ -371,14 +379,20 @@
                 previewImage.src = thumbnails[currentIndex].querySelector('img').src;
                 thumbLinks.forEach(link => link.classList.remove('kui-thumb-active'));
                 activeLink.classList.add('kui-thumb-active');
-                activeLink.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                activeLink.scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest'
+                });
             };
             galleryLayout.navigate = (direction) => setActive(currentIndex + direction);
             const thumbLinks = thumbnails.map((thumbLink, index) => {
                 const newThumb = thumbLink.querySelector('img').cloneNode(true);
                 const newThumbLink = document.createElement('a');
                 newThumbLink.href = '#';
-                newThumbLink.addEventListener('click', (e) => { e.preventDefault(); setActive(index); });
+                newThumbLink.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    setActive(index);
+                });
                 newThumbLink.appendChild(newThumb);
                 thumbList.appendChild(newThumbLink);
                 return newThumbLink;
@@ -390,18 +404,30 @@
                 const btnClose = document.getElementById('kui-lightbox-close');
                 const btnPrev = lightbox.querySelector('.prev');
                 const btnNext = lightbox.querySelector('.next');
-                let scale = 1, panning = false, pointX = 0, pointY = 0, start = { x: 0, y: 0 };
-                let naturalWidth = 0, naturalHeight = 0;
+                let scale = 1,
+                    panning = false,
+                    pointX = 0,
+                    pointY = 0,
+                    start = {
+                        x: 0,
+                        y: 0
+                    };
+                let naturalWidth = 0,
+                    naturalHeight = 0;
                 let animationFrameId = null;
                 const updateTransform = () => {
                     lightboxImg.style.transform = `translate(${pointX}px, ${pointY}px) scale(${scale})`;
                     animationFrameId = null;
                 };
-                const requestUpdate = () => { if (!animationFrameId) animationFrameId = requestAnimationFrame(updateTransform); };
+                const requestUpdate = () => {
+                    if (!animationFrameId) animationFrameId = requestAnimationFrame(updateTransform);
+                };
                 const open = (index) => {
                     setActive(index);
                     if (isDebugModeEnabled) debugModule.show();
-                    debugModule.update({ event: "open sequence start" });
+                    debugModule.update({
+                        event: "open sequence start"
+                    });
                     lightboxImg.style.transform = '';
                     lightboxImg.style.opacity = 0;
                     lightbox.classList.add('kui-active');
@@ -431,24 +457,52 @@
                     scale = Math.min(containerWidth / naturalWidth, containerHeight / naturalHeight, 1);
                     pointX = (containerWidth - naturalWidth * scale) / 2;
                     pointY = (containerHeight - naturalHeight * scale) / 2;
-                    debugModule.update({ event: "resetToFit calculated", naturalW: naturalWidth, naturalH: naturalHeight, containerW: containerWidth, containerH: containerHeight, scale: scale.toFixed(4), pointX: pointX.toFixed(2), pointY: pointY.toFixed(2), });
+                    debugModule.update({
+                        event: "resetToFit calculated",
+                        naturalW: naturalWidth,
+                        naturalH: naturalHeight,
+                        containerW: containerWidth,
+                        containerH: containerHeight,
+                        scale: scale.toFixed(4),
+                        pointX: pointX.toFixed(2),
+                        pointY: pointY.toFixed(2),
+                    });
                     requestUpdate();
                 };
                 const navigateLightbox = (direction) => open(currentIndex + direction);
                 const handleKeydown = (e) => {
                     if (e.key === 'Escape') close();
-                    if (e.key === 'ArrowLeft') { e.preventDefault(); e.stopImmediatePropagation(); navigateLightbox(-1); }
-                    if (e.key === 'ArrowRight') { e.preventDefault(); e.stopImmediatePropagation(); navigateLightbox(1); }
+                    if (e.key === 'ArrowLeft') {
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        navigateLightbox(-1);
+                    }
+                    if (e.key === 'ArrowRight') {
+                        e.preventDefault();
+                        e.stopImmediatePropagation();
+                        navigateLightbox(1);
+                    }
                 };
                 btnClose.addEventListener('click', close);
-                lightbox.addEventListener('click', (e) => { if (e.target === lightbox) close(); });
-                btnPrev.addEventListener('click', (e) => { e.stopPropagation(); navigateLightbox(-1); });
-                btnNext.addEventListener('click', (e) => { e.stopPropagation(); navigateLightbox(1); });
+                lightbox.addEventListener('click', (e) => {
+                    if (e.target === lightbox) close();
+                });
+                btnPrev.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    navigateLightbox(-1);
+                });
+                btnNext.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    navigateLightbox(1);
+                });
                 imgContainer.addEventListener('mousedown', (e) => {
-                    if(e.button !== 0) return;
+                    if (e.button !== 0) return;
                     e.preventDefault();
                     panning = true;
-                    start = { x: e.clientX - pointX, y: e.clientY - pointY };
+                    start = {
+                        x: e.clientX - pointX,
+                        y: e.clientY - pointY
+                    };
                     lightboxImg.style.cursor = 'grabbing';
                 });
                 window.addEventListener('mouseup', () => {
@@ -474,7 +528,9 @@
                     pointY = (e.clientY - rect.top) - ys * scale;
                     requestUpdate();
                 });
-                return { open };
+                return {
+                    open
+                };
             })();
             previewImage.addEventListener('click', () => lightboxModule.open(currentIndex));
             setActive(0);
@@ -519,7 +575,10 @@
             if (mainContent) {
                 clearInterval(mainInterval);
                 runPageLogic(); // Первый запуск
-                observer.observe(mainContent, { childList: true, subtree: true });
+                observer.observe(mainContent, {
+                    childList: true,
+                    subtree: true
+                });
             }
         }, 200);
     }
