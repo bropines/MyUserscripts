@@ -1,10 +1,9 @@
-// --- CONFIGURATION & STATE START --- //
 // ==UserScript==
 // @name          Kemono Download Button DEV
 // @namespace     http://tampermonkey.net/
-// @version       5.20
-// @description   Add free translators
-// @author        hoami_523 + Gemini + bropines
+// @version       5.21
+// @description   Add free translators and improved bulk download logic
+// @author        hoami_523 + Gemini (based on user's request) + bropines
 // @match         https://kemono.cr/*
 // @icon          https://kemono.cr/static/favicon.ico
 // @grant         GM_download
@@ -70,7 +69,7 @@
     .post-card .post-card-download-controls button:disabled,.post__actions button[data-is-downloading=true],.post__actions button[data-is-queued=true]{opacity:.6!important;cursor:not-allowed!important}.post-card .post-card-download-controls button[data-is-queued=true],.post__actions button[data-is-queued=true]{background-color:#fd7e14!important}.post-card .post-card-download-controls button[data-is-downloading=true],.post__actions button[data-is-downloading=true]{background-color:#6c757d!important}.post__actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding-top:5px}.post__actions>*{margin:0!important}#kdl-fixed-controls{position:fixed;bottom:15px;right:15px;display:flex;flex-direction:column;align-items:flex-end;gap:8px;z-index:9998}#kdl-queue-indicator{background-color:rgba(0,0,0,.7);color:#fff;padding:5px 10px;border-radius:5px;font-size:.9em;box-shadow:0 1px 5px rgba(0,0,0,.3)}#kdl-settings-btn{background-color:#007bff;color:#fff;border:none;padding:8px;border-radius:50%;cursor:pointer;font-size:1.2em;line-height:1;width:40px;height:40px;display:flex;align-items:center;justify-content:center;box-shadow:0 1px 5px rgba(0,0,0,.3)}#kdl-settings-btn:hover{background-color:#0056b3}#kdl-settings-overlay{position:fixed;top:0;left:0;width:100%;height:100%;background-color:rgba(0,0,0,.5);display:none;justify-content:center;align-items:center;z-index:10000;backdrop-filter:blur(7px)}
     #kdl-settings-modal{background-color:#333;color:#f0f0f0;border-radius:8px;box-shadow:0 5px 20px rgba(0,0,0,.4);width:500px;max-width:95vw;display:flex;flex-direction:column;max-height:85vh}#kdl-settings-modal-content{overflow-y:auto;padding:0 25px}#kdl-settings-modal h2{margin-top:25px;margin-bottom:25px;padding-bottom:10px;color:#00aeff;border-bottom:1px solid #555;text-align:center}#kdl-settings-modal h3{margin-top:20px;margin-bottom:10px;color:#f0f0f0;border-bottom:1px solid #444;padding-bottom:8px}#kdl-settings-modal label{display:block;margin-top:15px;margin-bottom:5px;font-weight:700}#kdl-settings-modal input[type=checkbox]{margin-right:8px;vertical-align:middle}#kdl-settings-modal input[type=number],#kdl-settings-modal input[type=text],#kdl-settings-modal input[type=password],#kdl-settings-modal select{width:100%;padding:8px 10px;border-radius:4px;border:1px solid #555;background-color:#444;color:#f0f0f0;box-sizing:border-box}#kdl-settings-modal input[type=number]{width:80px}#kdl-settings-modal small{display:block;font-size:0.8em;color:#aaa;margin-top:4px;font-weight:normal}.kdl-settings-actions{text-align:right;padding:15px 25px;background-color:#3a3a3a;border-top:1px solid #444;margin-top:auto;position:sticky;bottom:0}#kdl-settings-modal button{padding:10px 18px;border:none;border-radius:4px;cursor:pointer;margin-left:10px;font-weight:700}#kdl-settings-modal button.kdl-save{background-color:#28a745;color:#fff}#kdl-settings-modal button.kdl-save:hover{background-color:#218838}#kdl-settings-modal button.kdl-close{background-color:#6c757d;color:#fff}#kdl-settings-modal button.kdl-close:hover{background-color:#5a6268}#kdl-settings-modal .kdl-setting-item{margin-bottom:10px}
     #kdl-progress-container{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:80vw;max-width:800px;max-height:40vh;overflow-y:auto;z-index:10002;display:flex;flex-direction:column-reverse;gap:8px;padding-bottom:10px}.kdl-progress-task{background-color:rgba(40,43,48,0.9);backdrop-filter:blur(5px);color:#f0f0f0;border-radius:6px;padding:8px 12px;box-shadow:0 2px 8px rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.1);display:flex;flex-direction:column;gap:5px}.kdl-task-header{display:flex;justify-content:space-between;align-items:center;font-weight:bold}.kdl-task-title{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:.95em}.kdl-task-status{font-size:.85em;color:#ccc}.kdl-task-files{max-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:4px;padding-right:5px}.kdl-progress-bar-wrapper{width:100%}.kdl-progress-bar-label{color:#ddd;font-size:.8em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:2px}.kdl-progress-bar-label.kdl-success{color:#28a745}.kdl-progress-bar-label.kdl-error{color:#dc3545}.kdl-progress-bar{width:100%;height:8px;background-color:#555;border-radius:4px;overflow:hidden}.kdl-progress-bar-inner{width:0%;height:100%;background-color:#007bff;transition:width .1s linear,background-color .3s}.kdl-progress-bar-inner.kdl-success{background-color:#28a745!important}.kdl-progress-bar-inner.kdl-error{background-color:#dc3545!important}
-    #kdl-bulk-panel{position:sticky;top:10px;background-color:rgba(40,40,40,0.9);padding:10px;border-radius:8px;z-index:999;display:flex;gap:10px;align-items:center;justify-content:center;border:1px solid #555;backdrop-filter:blur(5px);margin-bottom:10px}
+    #kdl-bulk-panel{position:sticky;top:10px;background-color:rgba(40,40,40,0.9);padding:10px;border-radius:8px;z-index:800;display:flex;gap:10px;align-items:center;justify-content:center;border:1px solid #555;backdrop-filter:blur(5px);margin-bottom:10px}
     #kdl-bulk-panel button{padding:8px 12px;border:none;border-radius:4px;cursor:pointer;font-size:.9em;color:#fff}
     #kdl-bulk-download-btn{background-color:#28a745} #kdl-bulk-download-btn:disabled{background-color:#6c757d;cursor:not-allowed}
     #kdl-bulk-select-all{background-color:#007bff} #kdl-bulk-deselect-all{background-color:#dc3545}
@@ -82,7 +81,7 @@
     #kdl-file-picker-list li{margin-bottom:5px}
     #kdl-file-picker-list a{display:block;padding:8px 12px;background-color:#3a3a3a;border-radius:4px;color:#e0e0e0;text-decoration:none;transition:background-color .2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     #kdl-file-picker-list a:hover{background-color:#4a4a4a;color:#fff}
-    .kdl-post-info-tooltip {position: absolute;bottom: 100%;right: 0;background-color: #1a1a1a;color: #f0f0f0;padding: 8px;border-radius: 5px;border: 1px solid #555;z-index: 20;width: 200px;font-size: 0.85em;display: none;pointer-events: none;box-shadow: 0 3px 10px rgba(0,0,0,0.5);}
+    .kdl-post-info-tooltip {position: absolute;bottom: 100%;right: 0;background-color: #1a1a1a;color: #f0f0f0;padding: 8px;border-radius: 5px;border: 1px solid #555;z-index: 801;width: 200px;font-size: 0.85em;display: none;pointer-events: none;box-shadow: 0 3px 10px rgba(0,0,0,0.5);}
 `);
     // --- STYLING END --- //
 
@@ -393,9 +392,12 @@
             file_name: n,
             file_name_no_ext: a,
             file_ext: i,
-            file_index: String(e.index || "0").padStart(3, "0")
+            file_index: String(e.index || "0").padStart(3, "0"),
+            bulk_post_index: String(o.bulk_post_index || "0").padStart(2, "0"),
+            bulk_file_index: String(o.bulk_file_index || "0").padStart(4, "0")
         })
     }
+
     async function fetchPostDataFromAPI(t, e, o) {
         if ("UnknownService" === t || "UnknownUserID" === e || "UnknownPostID" === o || !settings.enableAPIFetch) return null;
         try {
@@ -409,10 +411,15 @@
             return console.error(`API fetch failed for ${t}/${e}/${o}:`, t), null
         }
     }
-    async function collectFilesForPost(t) {
-        debugLog("Collecting files for post:", t.postID);
+    async function collectFilesForPost(t, options = {}) {
+        debugLog("Collecting files for post:", t.postID, "with options:", options);
         await getSettings();
-        resetMediaCounter();
+
+        if (!options.isBulk) {
+            resetMediaCounter();
+        }
+        let postSpecificMediaCounter = 0;
+
         const e = [];
 
         try {
@@ -426,7 +433,8 @@
                 ...t,
                 postTitle: sanitizeFilename(n.title || t.postTitle),
                 authorName: sanitizeFilename("UnknownAuthor" === t.authorName ? t.userID : t.authorName),
-                postDate: i
+                postDate: i,
+                bulk_post_index: options.bulk_post_index,
             };
 
             if (settings.savePostTags) {
@@ -481,7 +489,6 @@
                 }
             }
 
-
             const l = [];
             n.file?.path && l.push({
                 name: n.file.name,
@@ -496,11 +503,16 @@
 
             l.forEach((t => {
                 globalMediaCounter++;
+                postSpecificMediaCounter++;
                 const o = /(jpe?g|png|gif|bmp|webp|mp4|webm|mov|avi|mkv|flv|wmv)$/i.test(t.name || "");
+                const fileDetails = {
+                    ...a,
+                    bulk_file_index: globalMediaCounter
+                };
                 const n = generateFilePath(settings.fileNameTemplate, {
                     name: t.name,
-                    index: globalMediaCounter
-                }, a);
+                    index: postSpecificMediaCounter
+                }, fileDetails);
                 e.push({
                     name: n,
                     source: "url",
@@ -542,12 +554,15 @@
         }
     }
 
+
     async function fetchAndCachePostData() {
         if (cachedPostFiles || !window.location.pathname.includes("/post/")) return;
         const {
             files: t,
             originalHTML: e
-        } = await collectFilesForPost(getPostDetailsFromPage());
+        } = await collectFilesForPost(getPostDetailsFromPage(), {
+            isBulk: false
+        });
         cachedPostFiles = t, originalPostContentHTML = e, originalPostContentHTML || (document.querySelector(".post__content") ? (originalPostContentHTML = document.querySelector(".post__content").innerHTML, debugLog("API did not provide post content. Using content from the page as a fallback.")) : debugLog("Failed to get post content from API and page.")), debugLog(`Page data cached with ${t.length} file entries. Content available: ${!!originalPostContentHTML}`)
     }
     // --- DATA FETCHING & PROCESSING END --- //
@@ -851,13 +866,27 @@
             }), 3e3)
         }
     }
+
     async function executeBulkDownload() {
         const t = document.getElementById("kdl-bulk-download-btn");
         if (0 === selectedPostIds.size) return void showMessage("No posts selected.", "warning");
         activeOperations++, t.disabled = !0;
-        const e = Array.from(selectedPostIds),
-            o = document.querySelector('.user-header__name span[itemprop="name"]')?.textContent.trim() || "UnknownAuthor",
-            n = progressManager.createTask(`bulk-zip-${Date.now()}`, `Bulk Download (${e.length} Posts)`);
+
+        const sortOrder = document.getElementById('kdl-bulk-sort-order').value;
+        let postIdsToDownload = Array.from(selectedPostIds);
+
+        if (sortOrder === 'oldest') {
+            postIdsToDownload.sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+        } else if (sortOrder === 'newest') {
+            postIdsToDownload.sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
+        }
+
+        const e = postIdsToDownload;
+        const o = document.querySelector('.user-header__name span[itemprop="name"]')?.textContent.trim() || "UnknownAuthor";
+        const n = progressManager.createTask(`bulk-zip-${Date.now()}`, `Bulk Download (${e.length} Posts)`);
+
+        resetMediaCounter();
+
         try {
             await loadJSZip();
             const s = new JSZip;
@@ -867,9 +896,14 @@
                 if (!l) continue;
                 const r = getPostCardDetails(l, o);
                 n.updateStatus(`[${i+1}/${e.length}] Fetching: ${r.postTitle}`);
+
                 const {
                     files: c
-                } = await collectFilesForPost(r);
+                } = await collectFilesForPost(r, {
+                    isBulk: true,
+                    bulk_post_index: i + 1,
+                });
+
                 if (0 === c.length) continue;
                 c.forEach((t => {
                     "text" === t.source && s.file(t.name, t.data)
@@ -920,6 +954,7 @@
             n.finish(), activeOperations--, t && (t.textContent = "Download Selected (0)", t.disabled = !0), document.querySelectorAll(".kdl-post-checkbox").forEach((t => t.checked = !1)), selectedPostIds.clear()
         }
     }
+
     async function showFilePickerModal(t) {
         const e = document.createElement("div");
         e.id = "kdl-file-picker-overlay";
@@ -1216,28 +1251,50 @@
         if (!cardList) return;
         const panel = document.createElement('div');
         panel.id = 'kdl-bulk-panel';
+
+        const sortLabel = document.createElement('label');
+        sortLabel.textContent = 'Order: ';
+        sortLabel.style.color = '#fff';
+        sortLabel.style.fontSize = '0.9em';
+
+        const sortSelect = document.createElement('select');
+        sortSelect.id = 'kdl-bulk-sort-order';
+        sortSelect.innerHTML = `
+        <option value="selection">By Selection</option>
+        <option value="oldest">Oldest First</option>
+        <option value="newest">Newest First</option>
+    `;
+        sortSelect.style.backgroundColor = '#444';
+        sortSelect.style.color = '#fff';
+        sortSelect.style.border = '1px solid #555';
+        sortSelect.style.borderRadius = '4px';
+        sortSelect.style.padding = '4px';
+
         const downloadBtn = document.createElement('button');
         downloadBtn.id = 'kdl-bulk-download-btn';
         downloadBtn.textContent = 'Download Selected (0)';
         downloadBtn.disabled = true;
         downloadBtn.addEventListener('click', executeBulkDownload);
+
         const selectAllBtn = document.createElement('button');
         selectAllBtn.id = 'kdl-bulk-select-all';
         selectAllBtn.textContent = 'Select All';
         selectAllBtn.addEventListener('click', () => {
-            document.querySelectorAll('article.post-card[data-id] .kdl-post-checkbox').forEach(cb => {
-                if (!cb.checked) cb.click();
+            document.querySelectorAll('article.post-card[data-id] .kdl-post-checkbox:not(:checked)').forEach(cb => {
+                cb.click();
             });
         });
+
         const deselectAllBtn = document.createElement('button');
         deselectAllBtn.id = 'kdl-bulk-deselect-all';
         deselectAllBtn.textContent = 'Deselect All';
         deselectAllBtn.addEventListener('click', () => {
-            document.querySelectorAll('article.post-card[data-id] .kdl-post-checkbox').forEach(cb => {
-                if (cb.checked) cb.click();
+            document.querySelectorAll('article.post-card[data-id] .kdl-post-checkbox:checked').forEach(cb => {
+                cb.click();
             });
         });
-        panel.append(selectAllBtn, deselectAllBtn, downloadBtn);
+
+        panel.append(selectAllBtn, deselectAllBtn, sortLabel, sortSelect, downloadBtn);
         cardList.parentElement.insertBefore(panel, cardList);
     }
 
@@ -1303,66 +1360,67 @@
         settingsModalElement = document.createElement('div');
         settingsModalElement.id = 'kdl-settings-modal';
 
-        // Создаем HTML для выпадающего списка языков
         const languageOptions = Object.entries(langCodeMap)
             .map(([name, code]) => `<option value="${name}">${name.charAt(0).toUpperCase() + name.slice(1)}</option>`)
             .join('');
 
+        // ИЗМЕНЕНИЕ: Обновляем описание для fileNameTemplate
         settingsModalElement.innerHTML = `
-    <div id="kdl-settings-modal-content">
-        <h2>Downloader Settings</h2>
+<div id="kdl-settings-modal-content">
+    <h2>Downloader Settings</h2>
 
-        <h3>General</h3>
-        <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-enableAPIFetch"> Enable Site API Fetching</label></div>
-        <div class="kdl-setting-item"><label>Session Cookie <input type="password" id="kdl-setting-sessionCookie" placeholder="Paste session cookie here"></label><small>Needed for API requests that require login.</small></div>
-        <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostContentAsText"> Save Post Content as .txt in ZIP</label></div>
-        <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-addMetadataFile"> Add metadata.json to ZIP</label></div>
-        <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostTags"> Add tags.txt to ZIP</label></div>
-        <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostComments"> Add comments.txt to ZIP</label></div>
-        <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-enableDebugLogging"> Enable Debug Logging (Console)</label></div>
+    <h3>General</h3>
+    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-enableAPIFetch"> Enable Site API Fetching</label></div>
+    <div class="kdl-setting-item"><label>Session Cookie <input type="password" id="kdl-setting-sessionCookie" placeholder="Paste session cookie here"></label><small>Needed for API requests that require login.</small></div>
+    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostContentAsText"> Save Post Content as .txt in ZIP</label></div>
+    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-addMetadataFile"> Add metadata.json to ZIP</label></div>
+    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostTags"> Add tags.txt to ZIP</label></div>
+    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostComments"> Add comments.txt to ZIP</label></div>
+    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-enableDebugLogging"> Enable Debug Logging (Console)</label></div>
 
-        <h3>File Naming</h3>
-        <div class="kdl-setting-item">
-            <label for="kdl-setting-fileNameTemplate">File & Folder Name Template</label>
-            <input type="text" id="kdl-setting-fileNameTemplate">
-            <small>Placeholders: {author_name}, {post_title}, {post_id}, {user_id}, {service}, {post_date}, {file_name}, {file_index}, {file_ext}, {file_name_no_ext}</small>
-        </div>
-
-        <h3>Visible Buttons</h3>
-        <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showZipButton"> Download (ZIP)</label></div>
-        <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showImagesButton"> Download Images</label></div>
-        <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showFilesButton"> Download Attachments</label></div>
-        <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showCopyLinksButton"> Copy Links</label></div>
-        <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showShareButton"> Share Links (Mobile)</label></div>
-        <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showTranslateButton"> Translate Button</label></div>
-
-        <h3>Downloads</h3>
-        <div class="kdl-setting-item"><label for="kdl-setting-maxConcurrentIndividualDownloads">Max Concurrent "Images/Files" Downloads</label><input type="number" id="kdl-setting-maxConcurrentIndividualDownloads" min="1" max="10"></div>
-        <div class="kdl-setting-item"><label for="kdl-setting-zipFileDownloadTimeout">File Timeout in ZIP (ms)</label><input type="number" id="kdl-setting-zipFileDownloadTimeout" min="10000" step="1000"><small>Time to wait for a single file before retrying.</small></div>
-        <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-enableDownloadRetries"> Enable Download Retries on Failure</label></div>
-        <div class="kdl-setting-item" id="kdl-retry-count-setting"><label for="kdl-setting-downloadRetryCount">Number of Retries</label><input type="number" id="kdl-setting-downloadRetryCount" min="0" max="5"></div>
-        <div class="kdl-setting-item" id="kdl-retry-delay-setting"><label for="kdl-setting-downloadRetryDelay">Delay Between Retries (ms)</label><input type="number" id="kdl-setting-downloadRetryDelay" min="500" step="500"></div>
-
-        <h3>Translation</h3>
-        <div class="kdl-setting-item">
-            <label for="kdl-setting-translationProvider">Translation Provider</label>
-            <select id="kdl-setting-translationProvider">
-                <option value="none">None</option>
-                <option value="gemini">Gemini</option>
-                <option value="deepl">DeepL</option>
-                <option value="yandex">Yandex (Free)</option>
-                <option value="google">Google (Free)</option>
-            </select>
-        </div>
-        <div class="kdl-setting-item">
-            <label for="kdl-setting-translationLanguage">Translate to Language</label>
-            <select id="kdl-setting-translationLanguage">${languageOptions}</select>
-        </div>
-        <div id="kdl-gemini-settings" style="display:none;"><h4>Gemini Settings</h4><div class="kdl-setting-item"><label for="kdl-setting-geminiApiKey">Gemini API Key</label><input type="password" id="kdl-setting-geminiApiKey" placeholder="Paste your API key here"></div><div class="kdl-setting-item"><label for="kdl-setting-translationModelName">Model Name</label><input type="text" id="kdl-setting-translationModelName"></div></div>
-        <div id="kdl-deepl-settings" style="display:none;"><h4>DeepL Settings</h4><div class="kdl-setting-item"><label for="kdl-setting-deeplApiKey">DeepL API Key</label><input type="password" id="kdl-setting-deeplApiKey" placeholder="Paste your API key here"></div><div class="kdl-setting-item"><label for="kdl-setting-deeplApiTier">API Tier</label><select id="kdl-setting-deeplApiTier"><option value="free">Free</option><option value="pro">Pro</option></select></div></div>
+    <h3>File Naming</h3>
+    <div class="kdl-setting-item">
+        <label for="kdl-setting-fileNameTemplate">File & Folder Name Template</label>
+        <input type="text" id="kdl-setting-fileNameTemplate">
+        <small><b>Placeholders:</b> {author_name}, {post_title}, {post_id}, {user_id}, {service}, {post_date}, {file_name}, {file_ext}, {file_name_no_ext}<br>
+               <b>Counters:</b> {file_index} (per post), {bulk_post_index} (post # in batch), {bulk_file_index} (file # in batch)</small>
     </div>
-    <div class="kdl-settings-actions"><button class="kdl-close">Close</button><button class="kdl-save">Save</button></div>
-    `;
+
+    <h3>Visible Buttons</h3>
+    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showZipButton"> Download (ZIP)</label></div>
+    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showImagesButton"> Download Images</label></div>
+    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showFilesButton"> Download Attachments</label></div>
+    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showCopyLinksButton"> Copy Links</label></div>
+    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showShareButton"> Share Links (Mobile)</label></div>
+    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showTranslateButton"> Translate Button</label></div>
+
+    <h3>Downloads</h3>
+    <div class="kdl-setting-item"><label for="kdl-setting-maxConcurrentIndividualDownloads">Max Concurrent "Images/Files" Downloads</label><input type="number" id="kdl-setting-maxConcurrentIndividualDownloads" min="1" max="10"></div>
+    <div class="kdl-setting-item"><label for="kdl-setting-zipFileDownloadTimeout">File Timeout in ZIP (ms)</label><input type="number" id="kdl-setting-zipFileDownloadTimeout" min="10000" step="1000"><small>Time to wait for a single file before retrying.</small></div>
+    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-enableDownloadRetries"> Enable Download Retries on Failure</label></div>
+    <div class="kdl-setting-item" id="kdl-retry-count-setting"><label for="kdl-setting-downloadRetryCount">Number of Retries</label><input type="number" id="kdl-setting-downloadRetryCount" min="0" max="5"></div>
+    <div class="kdl-setting-item" id="kdl-retry-delay-setting"><label for="kdl-setting-downloadRetryDelay">Delay Between Retries (ms)</label><input type="number" id="kdl-setting-downloadRetryDelay" min="500" step="500"></div>
+
+    <h3>Translation</h3>
+    <div class="kdl-setting-item">
+        <label for="kdl-setting-translationProvider">Translation Provider</label>
+        <select id="kdl-setting-translationProvider">
+            <option value="none">None</option>
+            <option value="gemini">Gemini</option>
+            <option value="deepl">DeepL</option>
+            <option value="yandex">Yandex (Free)</option>
+            <option value="google">Google (Free)</option>
+        </select>
+    </div>
+    <div class="kdl-setting-item">
+        <label for="kdl-setting-translationLanguage">Translate to Language</label>
+        <select id="kdl-setting-translationLanguage">${languageOptions}</select>
+    </div>
+    <div id="kdl-gemini-settings" style="display:none;"><h4>Gemini Settings</h4><div class="kdl-setting-item"><label for="kdl-setting-geminiApiKey">Gemini API Key</label><input type="password" id="kdl-setting-geminiApiKey" placeholder="Paste your API key here"></div><div class="kdl-setting-item"><label for="kdl-setting-translationModelName">Model Name</label><input type="text" id="kdl-setting-translationModelName"></div></div>
+    <div id="kdl-deepl-settings" style="display:none;"><h4>DeepL Settings</h4><div class="kdl-setting-item"><label for="kdl-setting-deeplApiKey">DeepL API Key</label><input type="password" id="kdl-setting-deeplApiKey" placeholder="Paste your API key here"></div><div class="kdl-setting-item"><label for="kdl-setting-deeplApiTier">API Tier</label><select id="kdl-setting-deeplApiTier"><option value="free">Free</option><option value="pro">Pro</option></select></div></div>
+</div>
+<div class="kdl-settings-actions"><button class="kdl-close">Close</button><button class="kdl-save">Save</button></div>
+`;
 
         settingsOverlayElement.appendChild(settingsModalElement);
         document.body.appendChild(settingsOverlayElement);
