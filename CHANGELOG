@@ -13,3 +13,17 @@ Since I am not a neurocode lover to commander every time I will write a whole li
 7. Added manual storage of Session Key (do not set export of settings to unknown people)
 
 Well, a bunch of small changes for Qol.
+
+UI:
+
+4.0
+I don't remember what I then stopped, so I just list everything that I changed
+1. Added the removal system of Embed links. Works crookedly, but tolerant
+2. Added button for copying links to the author
+3. Added an image search button in Google Lens (to translation of pictures)
+4. Added the Opening button of the original picture
+5. Blocks of video and images are completely updated
+6. Improved SPA support
+7. Added support for the premium of images (disabled by default)
+8. And a bunch of all sorts of small garbage ...
+9. Well, the interaction with the API is updated
