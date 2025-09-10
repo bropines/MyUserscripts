@@ -1,0 +1,15 @@
+Starting with this version, all updates are written in this file.
+
+Dowloader:
+
+5.4
+Since I am not a neurocode lover to commander every time I will write a whole list of changes
+1. Added export \ import of settings
+2. Added item templates stored in TM settings
+3. Added the creation of a web page to the archive when loading
+4. Added shift+click for isolation
+5. Added the selection procedure for BATCH of discharge
+6. Updated interaction with API
+7. Added manual storage of Session Key (do not set export of settings to unknown people)
+
+Well, a bunch of small changes for Qol.
