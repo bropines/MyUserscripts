@@ -49,6 +49,10 @@
 		addHtmlIndexInZip: true,
 		fileNameTemplate:
 			"{post_date}_{author_name}_{post_title}_{post_id}/{file_index}_{file_name}",
+		bulkDownloadMode: "single", // 'single' или 'multiple'
+		bulkSingleSystemPathTemplate: "{author_name}/[Kemono] {author_name} - {post_count} posts.zip",
+		bulkSingleInternalPathTemplate: "{post_date}_{post_title}/{file_index}_{file_name}",
+		bulkMultipleSystemPathTemplate: "{author_name}/{post_date}_{post_title}.zip"
 	};
 	let settings = {},
 		settingsLoadPromise = null,
@@ -87,6 +91,42 @@
     #kdl-file-picker-list a{display:block;padding:8px 12px;background-color:#3a3a3a;border-radius:4px;color:#e0e0e0;text-decoration:none;transition:background-color .2s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     #kdl-file-picker-list a:hover{background-color:#4a4a4a;color:#fff}
     .kdl-post-info-tooltip {position: absolute;bottom: 100%;right: 0;background-color: #1a1a1a;color: #f0f0f0;padding: 8px;border-radius: 5px;border: 1px solid #555;z-index: 801;width: 200px;font-size: 0.85em;display: none;pointer-events: none;box-shadow: 0 3px 10px rgba(0,0,0,0.5);}
+	/* Стили для Менеджера постов */
+#kdl-author-manager-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background-color: rgba(0,0,0,.7); display: none; /* Изначально скрыт */
+    justify-content: center; align-items: center; z-index: 10003; backdrop-filter: blur(5px);
+}
+#kdl-author-manager-modal {
+    background-color: #2b2b2b; color: #f0f0f0; border-radius: 8px;
+    width: 800px; max-width: 95vw; height: 90vh; display: flex; flex-direction: column;
+    box-shadow: 0 5px 20px rgba(0,0,0,.3); border: 1px solid #555;
+}
+#kdl-manager-header {
+    padding: 15px 20px; border-bottom: 1px solid #444;
+}
+#kdl-manager-header h3 { margin: 0; color: #00aeff; }
+#kdl-manager-controls {
+    display: flex; gap: 10px; padding: 10px 20px; border-bottom: 1px solid #444; align-items: center;
+}
+#kdl-manager-search { flex-grow: 1; padding: 8px; background-color: #3a3a3a; border: 1px solid #555; border-radius: 4px; color: #f0f0f0; }
+.kdl-manager-btn { padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; }
+#kdl-manager-post-list {
+    overflow-y: auto; flex-grow: 1; padding: 10px 20px;
+}
+#kdl-manager-post-list .post-item {
+    display: flex; align-items: center; padding: 8px; border-radius: 4px; margin-bottom: 5px;
+    cursor: pointer; transition: background-color 0.2s;
+}
+#kdl-manager-post-list .post-item:hover { background-color: #3a3a3a; }
+#kdl-manager-post-list .post-item input[type="checkbox"] { margin-right: 15px; width: 18px; height: 18px; }
+.post-item-label { display: flex; flex-direction: column; }
+.post-item-title { font-weight: bold; }
+.post-item-date { font-size: 0.8em; color: #aaa; }
+#kdl-manager-footer {
+    padding: 15px 20px; border-top: 1px solid #444; margin-top: auto;
+    display: flex; justify-content: space-between; align-items: center;
+}
 `);
 	// --- STYLING END --- //
 
@@ -537,9 +577,12 @@
 			return console.error(`API fetch failed for ${t}/${e}/${o}:`, t), null;
 		}
 	}
-	async function collectFilesForPost(t, options = {}) {
+async function collectFilesForPost(t, options = {}) {
 		debugLog("Collecting files for post:", t.postID, "with options:", options);
 		await getSettings();
+
+        // ОПРЕДЕЛЯЕМ ШАБЛОН ДЛЯ ИСПОЛЬЗОВАНИЯ
+        const templateToUse = options.template || settings.fileNameTemplate;
 
 		if (!options.isBulk) {
 			resetMediaCounter();
@@ -564,6 +607,11 @@
 				postDate: i,
 				bulk_post_index: options.bulk_post_index,
 			};
+            
+            // Если нужен только postDate (для режима multiple)
+            if (options.noFiles) {
+                return { files: [], originalHTML: "", postDate: i };
+            }
 
 			if (settings.savePostTags) {
 				try {
@@ -579,7 +627,7 @@
 							.join("\n");
 						e.push({
 							name: generateFilePath(
-								settings.fileNameTemplate,
+								templateToUse, // ИСПОЛЬЗУЕМ ПРАВИЛЬНЫЙ ШАБЛОН
 								{
 									name: "tags.txt",
 									index: 0,
@@ -616,7 +664,7 @@
 							.join("");
 						e.push({
 							name: generateFilePath(
-								settings.fileNameTemplate,
+								templateToUse, // ИСПОЛЬЗУЕМ ПРАВИЛЬНЫЙ ШАБЛОН
 								{
 									name: "comments.txt",
 									index: 0,
@@ -663,7 +711,7 @@
 					bulk_file_index: globalMediaCounter,
 				};
 				const n = generateFilePath(
-					settings.fileNameTemplate,
+					templateToUse, // ИСПОЛЬЗУЕМ ПРАВИЛЬНЫЙ ШАБЛОН
 					{
 						name: t.name,
 						index: postSpecificMediaCounter,
@@ -682,7 +730,7 @@
 				htmlToFormattedText(n.content) &&
 				e.push({
 					name: generateFilePath(
-						settings.fileNameTemplate,
+						templateToUse, // ИСПОЛЬЗУЕМ ПРАВИЛЬНЫЙ ШАБЛОН
 						{
 							name: "content.txt",
 							index: 0,
@@ -696,7 +744,7 @@
 			settings.addMetadataFile &&
 				e.push({
 					name: generateFilePath(
-						settings.fileNameTemplate,
+						templateToUse, // ИСПОЛЬЗУЕМ ПРАВИЛЬНЫЙ ШАБЛОН
 						{
 							name: "metadata.json",
 							index: 0,
@@ -711,12 +759,14 @@
 			return {
 				files: e,
 				originalHTML: n.content,
+                postDate: i // Возвращаем дату для использования в других функциях
 			};
 		} catch (t) {
 			console.error("Failed to collect files:", t);
 			return {
 				files: [],
 				originalHTML: "",
+                postDate: null
 			};
 		}
 	}
@@ -745,7 +795,7 @@
 	}
 	// --- DATA FETCHING & PROCESSING END --- //
 
-	// --- DOWNLOAD & ACTION LOGIC START --- //
+// --- DOWNLOAD & ACTION LOGIC START --- //
 
 	const langCodeMap = {
 		auto: "auto",
@@ -916,7 +966,7 @@
 		return s;
 	}
 	async function executeZipDownload(t) {
-		activeOperations++;
+		//activeOperations++;
 		const e = progressManager.createTask(
 			`zip-${t.postID}`,
 			`ZIP: ${t.postTitle}`,
@@ -928,7 +978,7 @@
 						? {
 								files: cachedPostFiles,
 							}
-						: await collectFilesForPost(t);
+						: await collectFilesForPost(t, { template: settings.fileNameTemplate });
 			if (0 === n.length) throw new Error("No content to ZIP.");
 			await loadJSZip();
 			let s = 0,
@@ -1000,7 +1050,8 @@
 		}
 	}
 	async function executeIndividualDownload(t, e) {
-		activeOperations++, await getSettings();
+		//activeOperations++, 
+		await getSettings();
 		const o = progressManager.createTask(
 			`${t}-${e.postID}`,
 			`${t}: ${e.postTitle}`,
@@ -1012,7 +1063,7 @@
 						? {
 								files: cachedPostFiles,
 							}
-						: await collectFilesForPost(e);
+						: await collectFilesForPost(e, { template: settings.fileNameTemplate });
 			let i;
 			if ("Images" === t) i = s.filter((t) => t.isMedia && "url" === t.source);
 			else if ("Attachments" === t)
@@ -1102,7 +1153,7 @@
 					? {
 							files: cachedPostFiles,
 						}
-					: await collectFilesForPost(e),
+					: await collectFilesForPost(e, { template: settings.fileNameTemplate }),
 			a = i.filter((t) => "url" === t.source);
 		if (0 === a.length) return void showMessage("No links found.", "warning");
 		o.textContent = "Working...";
@@ -1143,187 +1194,283 @@
 		}
 	}
 
-	async function executeBulkDownload() {
-		const t = document.getElementById("kdl-bulk-download-btn");
-		if (0 === selectedPostIds.size)
-			return void showMessage("No posts selected.", "warning");
-		activeOperations++, (t.disabled = !0);
+    // --- НАЧАЛО БЛОКА МАССОВОЙ ЗАГРУЗКИ (ПОЛНОСТЬЮ ПЕРЕПИСАН) --- //
+async function executeBulkDownload(postIdsOrEvent = null) {
+        const downloadBtn = document.getElementById("kdl-bulk-download-btn");
+        
+        let postIdsToProcess;
+        // ПРОВЕРКА: Определяем, что нам передали - событие клика или готовый Set с ID
+        if (postIdsOrEvent instanceof Set && postIdsOrEvent.size > 0) {
+            postIdsToProcess = postIdsOrEvent;
+        } else {
+            postIdsToProcess = selectedPostIds;
+        }
 
-		const sortOrder = document.getElementById("kdl-bulk-sort-order").value;
-		let postIdsToDownload = Array.from(selectedPostIds);
+        if (postIdsToProcess.size === 0) {
+            return showMessage("No posts selected.", "warning");
+        }
 
-		if (sortOrder === "oldest") {
-			postIdsToDownload.sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
-		} else if (sortOrder === "newest") {
-			postIdsToDownload.sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
-		}
+        if (downloadBtn) downloadBtn.disabled = true;
+        //activeOperations++;
+        updateQueueIndicator();
 
-		const e = postIdsToDownload;
-		const o =
-			document
-				.querySelector('.user-header__name span[itemprop="name"]')
-				?.textContent.trim() || "UnknownAuthor";
-		const n = progressManager.createTask(
-			`bulk-zip-${Date.now()}`,
-			`Bulk Download (${e.length} Posts)`,
-		);
+        const sortOrder = document.getElementById("kdl-bulk-sort-order")?.value || 'selection';
+        let postIdsArray = Array.from(postIdsToProcess);
 
-		resetMediaCounter();
+        if (sortOrder === 'oldest') {
+            postIdsArray.sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+        } else if (sortOrder === 'newest') {
+            postIdsArray.sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
+        }
 
-		try {
-			await getSettings(); 
-			await loadJSZip();
-			const s = new JSZip();
+        const authorName = document.querySelector('.user-header__name span[itemprop="name"]')?.textContent.trim() || "UnknownAuthor";
 
-			let htmlIndexString = "";
-			if (settings.addHtmlIndexInZip) {
-				htmlIndexString = `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Archive Index: ${sanitizeFilename(o)}</title>
-    <style>
-        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; background-color: #2b2b2b; color: #f0f0f0; margin: 0; padding: 20px; }
-        .container { max-width: 900px; margin: auto; background-color: #333; padding: 20px 40px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
-        h1 { color: #00aeff; border-bottom: 2px solid #555; padding-bottom: 10px; }
-        .post-entry { background-color: #3a3a3a; border: 1px solid #444; border-radius: 6px; padding: 15px; margin-bottom: 20px; }
-        h2 { margin-top: 0; color: #e0e0e0; }
-        ul { list-style: none; padding-left: 0; }
-        li { margin-bottom: 5px; }
-        a { color: #87ceeb; text-decoration: none; }
-        a:hover { text-decoration: underline; color: #a2d2ff; }
-        .file-info { font-size: 0.8em; color: #aaa; margin-left: 10px; }
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Archive Index</h1>
-        <h3>Author: ${sanitizeFilename(o)}</h3>
-        <p>Total posts: ${e.length}</p>
-        <hr>`;
-			}
+        await getSettings();
 
-			for (let i = 0; i < e.length; i++) {
-				const a = e[i],
-					l = document.querySelector(`article.post-card[data-id="${a}"]`);
-				if (!l) continue;
-				const r = getPostCardDetails(l, o);
-				n.updateStatus(`[${i + 1}/${e.length}] Fetching: ${r.postTitle}`);
+        try {
+            if (settings.bulkDownloadMode === 'multiple') {
+                await executeBulkDownloadMultiple(postIdsArray, authorName);
+            } else {
+                await executeBulkDownloadSingle(postIdsArray, authorName);
+            }
+        } catch (error) {
+            console.error("Bulk download execution failed:", error);
+            showMessage("A critical error occurred during bulk download.", "error");
+        } finally {
+            if (downloadBtn) downloadBtn.disabled = false;
+            document.querySelectorAll(".kdl-post-checkbox:checked").forEach((cb) => {
+                if (postIdsToProcess.has(cb.dataset.id)) {
+                    cb.checked = false;
+                }
+            });
 
-				const { files: c } = await collectFilesForPost(r, {
-					isBulk: true,
-					bulk_post_index: i + 1,
-				});
+            // Обновляем состояние основной кнопки после завершения
+            const bulkBtnOnPage = document.getElementById('kdl-bulk-download-btn');
+            if (bulkBtnOnPage) {
+                selectedPostIds.clear();
+                bulkBtnOnPage.textContent = `Download Selected (0)`;
+                bulkBtnOnPage.disabled = true;
+            }
+            //activeOperations--;
+            updateQueueIndicator();
+        }
+    }
 
-				if (settings.addHtmlIndexInZip) {
-					htmlIndexString += `
-        <div class="post-entry">
-            <h2><a href="${l.querySelector("a")?.href || "#"}" target="_blank">[${r.postDate || "N/A"}] ${r.postTitle} (ID: ${r.postID})</a></h2>
-            <ul>`;
+    async function executeBulkDownloadSingle(postIds, authorName) {
+        const task = progressManager.createTask(`bulk-single-${Date.now()}`, `Bulk Archive (${postIds.length} Posts)`);
+        resetMediaCounter();
 
-					if (0 === c.length) {
-						htmlIndexString += `<li>No files found for this post.</li>`;
-					} else {
-						c.forEach((file) => {
-							if (file.source === "text" || file.source === "url") {
-								const sanitizedPath = file.name
-									.split("/")
-									.map((part) => encodeURIComponent(part))
-									.join("/");
-								htmlIndexString += `<li><a href="./${sanitizedPath}">${file.name.split("/").pop()}</a></li>`;
-							}
-						});
-					}
-					htmlIndexString += `
-            </ul>
-        </div>`;
-				}
+        try {
+            await loadJSZip();
+            const zip = new JSZip();
 
-				if (0 === c.length) continue;
-				c.forEach((t) => {
-					"text" === t.source && s.file(t.name, t.data);
-				});
-				const d = c.filter((t) => "url" === t.source);
-				if (d.length > 0) {
-					n.updateStatus(
-						`[${i + 1}/${e.length}] Downloading ${d.length} files for ${r.postTitle}`,
-					);
-					const t = [];
-					let o = 0;
-					for (const [a, l] of d.entries())
-						t.push(
-							(async () => {
-								for (; o >= settings.maxConcurrentFileDownloadsInZip; )
-									await new Promise((t) => setTimeout(t, 200));
-								o++;
-								const e = `bulk-${i}-${a}`;
-								n.addFile(e, l.name);
-								try {
-									const t = await gmXmlhttpRequestWithRetries({
-										method: "GET",
-										url: l.data,
-										responseType: "arraybuffer",
-										timeout: settings.zipFileDownloadTimeout,
-										onprogress: (t) => {
-											t.lengthComputable &&
-												n.updateFileProgress(e, (t.loaded / t.total) * 100);
-										},
-									});
-									s.file(l.name, t.response), n.markFileComplete(e, !0);
-								} catch (t) {
-									n.markFileComplete(e, !1),
-										s.file(
-											`failed_${l.name.split("/").pop()}`,
-											`Failed to download file.\nURL: ${l.data}\nError: ${t.message}`,
-										);
-								} finally {
-									o--,
-										n.updateStatus(
-											`[${i + 1}/${e.length}] Downloading... ${a + 1}/${d.length} done`,
-										);
-								}
-							})(),
-						);
-					await Promise.all(t);
-				}
-			}
+            let htmlIndexString = "";
+            if (settings.addHtmlIndexInZip) {
+                htmlIndexString = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Archive: ${sanitizeFilename(authorName)}</title><style>body{font-family:sans-serif;background-color:#2b2b2b;color:#f0f0f0;padding:20px}.container{max-width:900px;margin:auto;background-color:#333;padding:20px 40px;border-radius:8px}h1{color:#00aeff}h2{color:#e0e0e0}a{color:#87ceeb}</style></head><body><div class="container"><h1>Archive Index</h1><h3>Author: ${sanitizeFilename(authorName)}</h3><p>Total posts: ${postIds.length}</p><hr>`;
+            }
 
-			if (settings.addHtmlIndexInZip) {
-				htmlIndexString += `
-    </div>
-</body>
-</html>`;
-				s.file("_index.html", htmlIndexString);
-			}
+            for (let i = 0; i < postIds.length; i++) {
+                const postId = postIds[i];
+                const postCard = document.querySelector(`article.post-card[data-id="${postId}"]`);
+                if (!postCard) continue;
 
-			n.updateStatus(`Zipping ${e.length} Posts...`);
-			const i = `${sanitizeFilename(o)}_Selected_${e.length}_Posts_${generateRandomId(6)}.zip`,
-				a = await s.generateAsync(
-					{
-						type: "blob",
-					},
-					(t) =>
-						n.updateStatus(`Generating final ZIP: ${t.percent.toFixed(0)}%`),
-				);
-			GM_download({
-				url: URL.createObjectURL(a),
-				name: i,
-				saveAs: !1,
-			}),
-				n.updateStatus("Complete!");
-		} catch (t) {
-			console.error("Bulk download failed:", t),
-				n.updateStatus(`Error: ${t.message}`);
-		} finally {
-			n.finish(),
-				(t.disabled = false),
-				document
-					.querySelectorAll(".kdl-post-checkbox:checked")
-					.forEach((cb) => cb.click());
-		}
-	}
+                const postDetails = getPostCardDetails(postCard, authorName);
+                task.updateStatus(`[${i + 1}/${postIds.length}] Fetching: ${postDetails.postTitle}`);
+
+                const { files, originalHTML } = await collectFilesForPost(postDetails, {
+                    isBulk: true,
+                    bulk_post_index: i + 1,
+                    template: settings.bulkSingleInternalPathTemplate
+                });
+
+                if (settings.addHtmlIndexInZip) {
+                    const postLink = postCard.querySelector("a")?.href || "#";
+                    htmlIndexString += `<div class="post-entry"><h2><a href="${postLink}" target="_blank">[${postDetails.postDate || "N/A"}] ${postDetails.postTitle}</a></h2><ul>`;
+                    if (files.length > 0) {
+                        files.forEach(file => {
+                             const sanitizedPath = file.name.split("/").map(part => encodeURIComponent(part)).join("/");
+                             htmlIndexString += `<li><a href="./${sanitizedPath}">${file.name.split("/").pop()}</a></li>`;
+                        });
+                    } else {
+                         htmlIndexString += `<li>No files found.</li>`;
+                    }
+                    htmlIndexString += `</ul></div>`;
+                }
+
+                if (files.length === 0) continue;
+
+                files.forEach(file => {
+                    if (file.source === 'text') zip.file(file.name, file.data);
+                });
+
+                const urlFiles = files.filter(f => f.source === 'url');
+                if (urlFiles.length > 0) {
+                    task.updateStatus(`[${i + 1}/${postIds.length}] Downloading ${urlFiles.length} files for ${postDetails.postTitle}`);
+                    const downloadPromises = [];
+                    let activeFileDownloads = 0;
+
+                    for (const [fileIndex, fileToDownload] of urlFiles.entries()) {
+                         downloadPromises.push((async () => {
+                            while (activeFileDownloads >= settings.maxConcurrentFileDownloadsInZip) {
+                                await new Promise(resolve => setTimeout(resolve, 200));
+                            }
+                            activeFileDownloads++;
+
+                            const fileTaskId = `bulk-${i}-${fileIndex}`;
+                            task.addFile(fileTaskId, fileToDownload.name);
+
+                            try {
+                                const response = await gmXmlhttpRequestWithRetries({
+                                    method: "GET", url: fileToDownload.data, responseType: "arraybuffer",
+                                    timeout: settings.zipFileDownloadTimeout,
+                                    onprogress: (e) => {
+                                        if (e.lengthComputable) task.updateFileProgress(fileTaskId, (e.loaded / e.total) * 100);
+                                    }
+                                });
+                                zip.file(fileToDownload.name, response.response);
+                                task.markFileComplete(fileTaskId, true);
+                            } catch (error) {
+                                task.markFileComplete(fileTaskId, false);
+                                zip.file(`failed_${fileToDownload.name.split('/').pop()}`, `Failed to download.\nURL: ${fileToDownload.data}\nError: ${error.message}`);
+                            } finally {
+                                activeFileDownloads--;
+                            }
+                        })());
+                    }
+                    await Promise.all(downloadPromises);
+                }
+            }
+
+            if (settings.addHtmlIndexInZip) {
+                htmlIndexString += `</div></body></html>`;
+                zip.file("_index.html", htmlIndexString);
+            }
+
+            task.updateStatus(`Zipping ${postIds.length} Posts...`);
+            const finalZipName = formatNameFromTemplate(settings.bulkSingleSystemPathTemplate, {
+                author_name: authorName,
+                post_count: postIds.length
+            });
+
+            const blob = await zip.generateAsync({ type: "blob" }, (meta) => {
+                task.updateStatus(`Generating final ZIP: ${meta.percent.toFixed(0)}%`);
+            });
+
+            GM_download({ url: URL.createObjectURL(blob), name: finalZipName, saveAs: false });
+            task.updateStatus("Complete!");
+        } catch (error) {
+            console.error("Bulk download (single) failed:", error);
+            task.updateStatus(`Error: ${error.message}`);
+        } finally {
+            task.finish();
+        }
+    }
+
+    async function executeBulkDownloadMultiple(postIds, authorName) {
+        const task = progressManager.createTask(`bulk-multiple-${Date.now()}`, `Bulk Queuing (${postIds.length} Posts)`);
+        task.updateStatus("Adding posts to the download queue...");
+
+        for (let i = 0; i < postIds.length; i++) {
+            const postId = postIds[i];
+            const postCard = document.querySelector(`article.post-card[data-id="${postId}"]`);
+            if (!postCard) continue;
+
+            const postDetails = getPostCardDetails(postCard, authorName);
+            const { postDate } = await collectFilesForPost(postDetails, { isBulk: true, noFiles: true });
+            postDetails.postDate = postDate;
+
+            addTaskToQueue(
+                'Bulk-Single-Zip',
+                (pd) => downloadPostAsZip(pd),
+                postDetails,
+                null // No specific button for this task
+            );
+            task.updateStatus(`Queued ${i + 1}/${postIds.length} posts...`);
+        }
+
+        task.updateStatus("All posts queued! Downloads will start based on concurrency settings.");
+        task.finish(3000);
+    }
+
+    async function downloadPostAsZip(details) {
+        // This is now an action for the queue, so it manages its own activeOperations.
+        // The queue manager handles the concurrency.
+        const postTask = progressManager.createTask(`zip-multi-${details.postID}`, `ZIP: ${details.postTitle}`);
+        try {
+            const { files } = await collectFilesForPost(details, {
+                 isBulk: false, // Each zip is self-contained
+                 template: "{file_index}_{file_name}" // Simple internal structure
+            });
+
+            if (files.length === 0) throw new Error("No content to ZIP.");
+
+            await loadJSZip();
+            const zip = new JSZip();
+            let failedFileCount = 0;
+
+            const urlFiles = files.filter(f => f.source === 'url');
+            postTask.updateStatus(`Downloading ${urlFiles.length} files...`);
+
+            files.forEach(file => {
+                if(file.source === 'text') zip.file(file.name, file.data);
+            });
+
+            const downloadPromises = [];
+            let activeFileDownloads = 0;
+            for (const [fileIndex, fileToDownload] of urlFiles.entries()) {
+                 downloadPromises.push((async () => {
+                    while (activeFileDownloads >= settings.maxConcurrentFileDownloadsInZip) {
+                        await new Promise(resolve => setTimeout(resolve, 200));
+                    }
+                    activeFileDownloads++;
+                    const fileTaskId = `multi-${details.postID}-${fileIndex}`;
+                    postTask.addFile(fileTaskId, fileToDownload.name);
+
+                    try {
+                        const response = await gmXmlhttpRequestWithRetries({
+                             method: "GET", url: fileToDownload.data, responseType: "arraybuffer",
+                             timeout: settings.zipFileDownloadTimeout,
+                             onprogress: (e) => {
+                                 if (e.lengthComputable) postTask.updateFileProgress(fileTaskId, (e.loaded / e.total) * 100);
+                             }
+                        });
+                        zip.file(fileToDownload.name, response.response);
+                        postTask.markFileComplete(fileTaskId, true);
+                    } catch (error) {
+                        failedFileCount++;
+                        postTask.markFileComplete(fileTaskId, false);
+                    } finally {
+                        activeFileDownloads--;
+                    }
+                })());
+            }
+            await Promise.all(downloadPromises);
+
+            postTask.updateStatus("Zipping...");
+
+            const zipFileName = formatNameFromTemplate(settings.bulkMultipleSystemPathTemplate, {
+                author_name: details.authorName,
+                post_title: details.postTitle,
+                post_id: details.postID,
+                user_id: details.userID,
+                service: details.service,
+                post_date: details.postDate
+            });
+
+            const blob = await zip.generateAsync({ type: "blob" });
+            GM_download({ url: URL.createObjectURL(blob), name: zipFileName, saveAs: false });
+
+            postTask.updateStatus(`Complete! ${failedFileCount > 0 ? `(${failedFileCount} fails)`: ''}`);
+        } catch (error) {
+            console.error(`Failed to download post ${details.postID} as ZIP:`, error);
+            postTask.updateStatus(`Error: ${error.message}`);
+            throw error; // Propagate error to queue manager
+        } finally {
+            postTask.finish();
+        }
+    }
+    // --- КОНЕЦ БЛОКА МАССОВОЙ ЗАГРУЗКИ --- //
+
 
 	async function showFilePickerModal(t) {
 		const e = document.createElement("div");
@@ -1337,7 +1484,7 @@
 				t.target === e && e.remove();
 			});
 		try {
-			const { files: n } = await collectFilesForPost(t),
+			const { files: n } = await collectFilesForPost(t, { template: settings.fileNameTemplate }),
 				s = n.filter((t) => !t.isMedia && "url" === t.source);
 			if (0 === s.length)
 				return void (o.innerHTML =
@@ -1375,87 +1522,83 @@
 				(o.innerHTML = `<h4>Failed to load attachments.</h4><p style="color:#ccc;font-size:0.9em;">${t.message}</p>`);
 		}
 	}
-	// --- DOWNLOAD & ACTION LOGIC END --- //
+// --- DOWNLOAD & ACTION LOGIC END --- //
 
-	// --- QUEUE MANAGEMENT START --- //
+// --- QUEUE MANAGEMENT START --- //
 	function updateQueueIndicator() {
 		if (queueIndicatorElement)
 			queueIndicatorElement.textContent = `Active: ${activeOperations} / Queue: ${downloadQueue.length}`;
 	}
+
 	async function processQueue() {
 		await getSettings();
-		updateQueueIndicator();
-		if (
-			activeOperations >= settings.maxConcurrentOperations ||
-			downloadQueue.length === 0
-		) {
-			isQueueProcessing = activeOperations > 0;
-			return;
-		}
+		if (isQueueProcessing) return; // Предотвращаем двойной запуск
+
 		isQueueProcessing = true;
-		const task = downloadQueue.shift();
-		updateQueueIndicator();
-		if (task.buttonElement) {
-			delete task.buttonElement.dataset.isQueued;
-			task.buttonElement.dataset.isDownloading = "true";
-			task.buttonElement.textContent = "Working...";
-		}
-		debugLog(
-			`Processing task for post ${task.postDetails.postID}, type: ${task.type}.`,
-		);
-		try {
-			await task.action(
-				task.postDetails,
-				task.buttonElement,
-				task.buttonElement.dataset.originalText,
-			);
-		} catch (error) {
-			console.error("Error processing queued task:", error, task);
-		} finally {
+
+		while(downloadQueue.length > 0 && activeOperations < settings.maxConcurrentOperations) {
+			activeOperations++;
+			updateQueueIndicator();
+
+			const task = downloadQueue.shift();
+			
 			if (task.buttonElement) {
-				setTimeout(() => {
-					task.buttonElement.textContent =
-						task.buttonElement.dataset.originalText;
-					task.buttonElement.disabled = false;
-					delete task.buttonElement.dataset.isDownloading;
-				}, 3000);
+				delete task.buttonElement.dataset.isQueued;
+				task.buttonElement.dataset.isDownloading = "true";
+				task.buttonElement.textContent = "Working...";
 			}
-			activeOperations--;
-			isQueueProcessing = false;
-			processQueue();
+			debugLog(`Processing task for post ${task.postDetails?.postID || 'bulk'}, type: ${task.type}.`);
+
+			// Запускаем задачу, но не ждем ее здесь, чтобы цикл мог продолжить для параллельных задач
+			task.action(task.postDetails, task.buttonElement, task.buttonElement?.dataset.originalText)
+				.catch(error => {
+					console.error("Error processing queued task:", error, task);
+				})
+				.finally(() => {
+					if (task.buttonElement) {
+						setTimeout(() => {
+							task.buttonElement.textContent = task.buttonElement.dataset.originalText;
+							task.buttonElement.disabled = false;
+							delete task.buttonElement.dataset.isDownloading;
+						}, 2000);
+					}
+					activeOperations--;
+					updateQueueIndicator();
+                    // Рекурсивно вызываем, чтобы проверить, можно ли запустить следующую задачу
+                    // Сбрасываем флаг, чтобы следующая проверка могла начаться
+                    isQueueProcessing = false;
+                    processQueue();
+				});
 		}
+        isQueueProcessing = false;
 	}
 
-	function addTaskToQueue(
-		type,
-		action,
-		postDetails,
-		buttonElement,
-		originalButtonText,
-	) {
-		if (
-			buttonElement.dataset.isDownloading === "true" ||
-			buttonElement.dataset.isQueued === "true"
-		) {
-			return;
+	function addTaskToQueue(type, action, postDetails, buttonElement, originalButtonText) {
+		if (buttonElement) {
+			if (buttonElement.dataset.isDownloading === "true" || buttonElement.dataset.isQueued === "true") {
+				return;
+			}
+			buttonElement.dataset.isQueued = "true";
+			buttonElement.dataset.originalText = originalButtonText;
+			buttonElement.textContent = "Queued";
+			buttonElement.disabled = true;
 		}
-		buttonElement.dataset.isQueued = "true";
-		buttonElement.dataset.originalText = originalButtonText;
-		buttonElement.textContent = "Queued";
-		buttonElement.disabled = true;
+
 		downloadQueue.push({
 			type,
 			action,
 			postDetails,
 			buttonElement,
 		});
+
 		updateQueueIndicator();
-		if (!isQueueProcessing) processQueue();
+		// Просто вызываем processQueue, он сам разберется, может ли он работать
+		processQueue();
 	}
 	// --- QUEUE MANAGEMENT END --- //
 
 	// --- UI CREATION & INJECTION START --- //
-	async function handlePageContent() {
+async function handlePageContent() {
 		try {
 			await getSettings();
 			await loadJSZip();
@@ -1464,7 +1607,7 @@
 			selectedPostIds.clear();
 			document
 				.querySelectorAll(
-					".kdl-button, .post-card-download-controls, #kdl-bulk-panel, .kdl-post-checkbox",
+					".kdl-button, .post-card-download-controls, #kdl-bulk-panel, .kdl-post-checkbox, #kdl-author-manager-btn", // Добавил id кнопки сюда для очистки
 				)
 				.forEach((el) => el.remove());
 
@@ -1481,8 +1624,17 @@
 				).find((b) => b.textContent.includes("Favorite"));
 				createAndInsertPostPageButtons(actionsDiv, favButton);
 				fetchAndCachePostData();
+
 			} else if (window.location.pathname.includes("/user/")) {
-				createBulkDownloadPanel();
+                // --- ИЗМЕНЕННЫЙ БЛОК ---
+                const userHeaderActions = document.querySelector('.user-header__actions');
+                if (userHeaderActions) {
+                    const managerBtn = createAuthorManagerButton();
+                    // Вставляем кнопку перед кнопкой "Upload file"
+                    userHeaderActions.prepend(managerBtn);
+                }
+                
+				createBulkDownloadPanel(); // Эта функция создает панель ниже, как и раньше
 				const pageAuthorName =
 					document
 						.querySelector('.user-header__name span[itemprop="name"]')
@@ -1505,11 +1657,13 @@
 							}
 						});
 					});
+                // --- КОНЕЦ ИЗМЕНЕННОГО БЛОКА ---
 			}
 		} catch (error) {
 			console.error("Error during page content handling:", error);
 		}
 	}
+
 	async function createAndInsertPostPageButtons(container, referenceElement) {
 		await getSettings();
 		document.querySelectorAll(".kdl-button").forEach((el) => el.remove());
@@ -1847,6 +2001,236 @@
 		cardList.parentElement.insertBefore(panel, cardList);
 	}
 
+function createAuthorManagerButton() {
+        if (document.getElementById('kdl-author-manager-btn')) {
+            return document.getElementById('kdl-author-manager-btn');
+        }
+
+		const managerBtn = document.createElement('button');
+		managerBtn.id = 'kdl-author-manager-btn';
+		managerBtn.textContent = '🗂️ Manage All Posts';
+        // Стилизуем кнопку, чтобы она выглядела как остальные в шапке
+        managerBtn.style.backgroundColor = '#6f42c1';
+        managerBtn.style.color = 'white';
+        managerBtn.style.border = 'none';
+        managerBtn.style.borderRadius = '4px';
+        managerBtn.style.padding = '0 12px';
+        managerBtn.style.height = '32px';
+        managerBtn.style.fontSize = '14px';
+        managerBtn.style.cursor = 'pointer';
+		managerBtn.title = 'Load all posts from this author into a powerful manager with search and bulk selection.';
+		managerBtn.addEventListener('click', launchAuthorManager);
+
+		return managerBtn;
+	}
+
+	async function launchAuthorManager() {
+		const overlay = createAuthorManagerModal();
+		const listContainer = document.getElementById('kdl-manager-post-list');
+		const header = document.getElementById('kdl-manager-header').querySelector('h3');
+		const authorName = document.querySelector('.user-header__name span[itemprop="name"]')?.textContent.trim() || "UnknownAuthor";
+		header.textContent = `Loading posts for: ${authorName}`;
+		listContainer.innerHTML = '<p style="text-align:center; padding: 20px;">Fetching all post data, this may take a moment...</p>';
+
+		const allPosts = await fetchAllAuthorPosts();
+
+		if (allPosts.length > 0) {
+			header.textContent = `Manage ${allPosts.length} posts by ${authorName}`;
+			populateManagerList(allPosts);
+			setupManagerEventListeners(allPosts);
+		} else {
+			header.textContent = `Failed to load posts for ${authorName}`;
+			listContainer.innerHTML = '<p style="text-align:center; padding: 20px;">Could not retrieve post list from the API. Check your session cookie or API settings.</p>';
+		}
+	}
+
+	function createAuthorManagerModal() {
+		let overlay = document.getElementById('kdl-author-manager-overlay');
+        if (overlay) {
+            overlay.style.display = 'flex';
+            return overlay;
+        }
+
+		overlay = document.createElement('div');
+		overlay.id = 'kdl-author-manager-overlay';
+		overlay.innerHTML = `
+			<div id="kdl-author-manager-modal">
+				<div id="kdl-manager-header"><h3></h3></div>
+				<div id="kdl-manager-controls">
+					<input type="text" id="kdl-manager-search" placeholder="Search by title...">
+					<button id="kdl-manager-select-all" class="kdl-manager-btn" style="background-color: #007bff;">Select Visible</button>
+					<button id="kdl-manager-deselect-all" class="kdl-manager-btn" style="background-color: #dc3545;">Deselect Visible</button>
+				</div>
+				<div id="kdl-manager-post-list"></div>
+				<div id="kdl-manager-footer">
+					<span id="kdl-manager-counter">Selected: 0</span>
+					<div>
+                        <button id="kdl-manager-download" class="kdl-manager-btn" style="background-color: #28a745;" disabled>Download Selected</button>
+                        <button id="kdl-manager-close" class="kdl-manager-btn" style="background-color: #6c757d;">Close</button>
+                    </div>
+				</div>
+			</div>
+		`;
+		document.body.appendChild(overlay);
+
+		const modal = overlay.querySelector('#kdl-author-manager-modal');
+        const closeBtn = overlay.querySelector('#kdl-manager-close');
+
+		overlay.addEventListener('click', (e) => {
+			if (e.target === overlay) {
+				overlay.style.display = 'none';
+			}
+		});
+        closeBtn.addEventListener('click', () => {
+            overlay.style.display = 'none';
+        });
+
+		return overlay;
+	}
+
+	async function fetchAllAuthorPosts() {
+		const pathParts = window.location.pathname.match(/\/([^/]+)\/user\/([^/]+)/);
+		if (!pathParts || pathParts.length < 3) {
+            showMessage("Could not determine author ID from URL.", "error");
+            return [];
+        }
+        
+		const service = pathParts[1];
+		const userID = pathParts[2];
+
+		let allPosts = [];
+		let offset = 0;
+		const limit = 50;
+
+		const task = progressManager.createTask(`fetch-posts-${userID}`, `Fetching all posts for ${userID}...`);
+
+		while (true) {
+			try {
+                task.updateStatus(`Fetching page ${offset / limit + 1}... Found ${allPosts.length} posts.`);
+				const response = await gmXmlhttpRequestWithRetries({
+					method: 'GET',
+					url: `https://kemono.cr/api/v1/${service}/user/${userID}/posts?o=${offset}`,
+					responseType: 'json',
+					timeout: 30000,
+				});
+
+				const postsOnPage = response.response;
+				if (!Array.isArray(postsOnPage) || postsOnPage.length === 0) {
+					break; // Больше постов нет, выходим из цикла
+				}
+				allPosts = allPosts.concat(postsOnPage);
+				offset += limit;
+				await new Promise(res => setTimeout(res, 200)); // Задержка, чтобы не нагружать API
+			} catch (error) {
+                // ИСПРАВЛЕНИЕ: Проверяем, является ли ошибка сигналом конца списка
+                if (error.message.includes("Status 400")) {
+                    debugLog("Reached end of posts (API returned 400). This is a normal exit condition.");
+                } else {
+				    console.error(`Failed to fetch posts at offset ${offset}:`, error);
+				    showMessage('Error fetching full post list. The result may be incomplete.', 'error');
+                    task.updateStatus(`Error fetching posts: ${error.message}`);
+                }
+				break; // Прерываем цикл в любом случае (либо конец, либо реальная ошибка)
+			}
+		}
+        task.updateStatus(`Complete! Found ${allPosts.length} posts.`);
+        task.finish(3000);
+		return allPosts;
+	}
+
+	function populateManagerList(posts) {
+		const listContainer = document.getElementById('kdl-manager-post-list');
+		const fragment = document.createDocumentFragment();
+
+		posts.forEach(post => {
+			const postDate = post.published ? new Date(post.published).toISOString().split('T') : 'No Date';
+			const item = document.createElement('div');
+			item.className = 'post-item';
+			item.dataset.id = post.id;
+			item.dataset.title = post.title.toLowerCase();
+
+			item.innerHTML = `
+                <input type="checkbox" data-id="${post.id}">
+                <div class="post-item-label">
+                    <span class="post-item-title">${sanitizeFilename(post.title)}</span>
+                    <span class="post-item-date">${postDate} | ID: ${post.id}</span>
+                </div>
+            `;
+			fragment.appendChild(item);
+		});
+
+		listContainer.innerHTML = '';
+		listContainer.appendChild(fragment);
+	}
+
+	function setupManagerEventListeners() {
+        const searchInput = document.getElementById('kdl-manager-search');
+        const selectAllBtn = document.getElementById('kdl-manager-select-all');
+        const deselectAllBtn = document.getElementById('kdl-manager-deselect-all');
+        const downloadBtn = document.getElementById('kdl-manager-download');
+        const counter = document.getElementById('kdl-manager-counter');
+        const listContainer = document.getElementById('kdl-manager-post-list');
+
+        const updateCounter = () => {
+            const count = listContainer.querySelectorAll('input[type="checkbox"]:checked').length;
+            counter.textContent = `Selected: ${count}`;
+            downloadBtn.disabled = count === 0;
+        };
+
+        searchInput.addEventListener('input', () => {
+            const searchTerm = searchInput.value.toLowerCase();
+            listContainer.querySelectorAll('.post-item').forEach(item => {
+                const isVisible = item.dataset.title.includes(searchTerm);
+                item.style.display = isVisible ? 'flex' : 'none';
+            });
+        });
+
+        selectAllBtn.addEventListener('click', () => {
+            listContainer.querySelectorAll('.post-item').forEach(item => {
+                if (item.style.display !== 'none') {
+                    item.querySelector('input[type="checkbox"]').checked = true;
+                }
+            });
+            updateCounter();
+        });
+
+        deselectAllBtn.addEventListener('click', () => {
+            listContainer.querySelectorAll('.post-item').forEach(item => {
+                if (item.style.display !== 'none') {
+                     item.querySelector('input[type="checkbox"]').checked = false;
+                }
+            });
+            updateCounter();
+        });
+
+        listContainer.addEventListener('click', (e) => {
+            const target = e.target;
+            if (target.matches('.post-item') || target.closest('.post-item')) {
+                const item = target.closest('.post-item');
+                const checkbox = item.querySelector('input[type="checkbox"]');
+                if (target.tagName !== 'INPUT') {
+                    checkbox.checked = !checkbox.checked;
+                }
+                updateCounter();
+            }
+        });
+
+        downloadBtn.addEventListener('click', () => {
+            const selectedIds = new Set();
+            listContainer.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
+                selectedIds.add(cb.dataset.id);
+            });
+
+            if (selectedIds.size > 0) {
+                 // Прячем модальное окно и запускаем загрузку
+                document.getElementById('kdl-author-manager-overlay').style.display = 'none';
+                executeBulkDownload(selectedIds);
+            }
+        });
+
+        updateCounter(); // Initial call
+	}
+
 	function injectCheckbox(postCardNode) {
 		if (postCardNode.querySelector(".kdl-post-checkbox")) return;
 		const postId = postCardNode.dataset.id;
@@ -1913,114 +2297,151 @@
 			.join("");
 
 		settingsModalElement.innerHTML = `
-<div id="kdl-settings-modal-content">
-    <h2>Downloader Settings</h2>
+        <div id="kdl-settings-modal-content">
+            <h2>Downloader Settings</h2>
 
-    <h3>General</h3>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-enableAPIFetch"> Enable Site API Fetching</label></div>
-    <div class="kdl-setting-item"><label>Session Cookie <input type="password" id="kdl-setting-sessionCookie" placeholder="Paste session cookie here"></label><small>Needed for API requests that require login.</small></div>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostContentAsText"> Save Post Content as .txt in ZIP</label></div>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-addMetadataFile"> Add metadata.json to ZIP</label></div>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-addHtmlIndexInZip"> Add _index.html to Bulk ZIP</label></div>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostTags"> Add tags.txt to ZIP</label></div>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostComments"> Add comments.txt to ZIP</label></div>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-enableDebugLogging"> Enable Debug Logging (Console)</label></div>
+            <h3>General</h3>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-enableAPIFetch"> Enable Site API Fetching</label></div>
+            <div class="kdl-setting-item"><label>Session Cookie <input type="password" id="kdl-setting-sessionCookie" placeholder="Paste session cookie here"></label><small>Needed for API requests that require login.</small></div>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostContentAsText"> Save Post Content as .txt in ZIP</label></div>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-addMetadataFile"> Add metadata.json to ZIP</label></div>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-addHtmlIndexInZip"> Add _index.html to Bulk ZIP</label></div>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostTags"> Add tags.txt to ZIP</label></div>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostComments"> Add comments.txt to ZIP</label></div>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-enableDebugLogging"> Enable Debug Logging (Console)</label></div>
 
-    <h3>File Naming</h3>
-    <div class="kdl-setting-item">
-        <label for="kdl-setting-fileNameTemplate">File & Folder Name Template</label>
-        <input type="text" id="kdl-setting-fileNameTemplate">
-        <small><b>Placeholders:</b> {author_name}, {post_title}, {post_id}, {user_id}, {service}, {post_date}, {file_name}, {file_ext}, {file_name_no_ext}<br>
-               <b>Counters:</b> {file_index} (per post), {bulk_post_index} (post # in batch), {bulk_file_index} (file # in batch)</small>
-    </div>
-    <!-- НОВЫЙ БЛОК ДЛЯ УПРАВЛЕНИЯ ШАБЛОНАМИ -->
-    <div class="kdl-setting-item">
-        <label for="kdl-template-select">Saved Templates</label>
-        <div style="display: flex; gap: 5px;">
-            <select id="kdl-template-select" style="flex-grow: 1;"></select>
-            <button id="kdl-template-delete-btn" style="padding: 5px 10px; background-color: #dc3545; color: white; border: none; border-radius: 4px;">Delete</button>
+            <h3>File Naming & Structure</h3>
+            <div class="kdl-setting-item">
+                <label for="kdl-setting-fileNameTemplate">Template for <u>Individual Downloads</u> (Images/Attachments)</label>
+                <input type="text" id="kdl-setting-fileNameTemplate">
+                <small>Defines the save path for single files. <b>Example:</b> {author_name}/{post_date}_{post_title}/{file_name}</small>
+            </div>
+            
+            <!-- ВОТ ЭТОТ БЛОК БЫЛ ПОТЕРЯН. Я ЕГО ВОССТАНОВИЛ -->
+            <div class="kdl-setting-item">
+                <label for="kdl-template-select">Saved Templates</label>
+                <div style="display: flex; gap: 5px;">
+                    <select id="kdl-template-select" style="flex-grow: 1;"></select>
+                    <button id="kdl-template-delete-btn" style="padding: 5px 10px; background-color: #dc3545; color: white; border: none; border-radius: 4px;">Delete</button>
+                </div>
+                <div style="display: flex; gap: 5px; margin-top: 5px;">
+                    <input type="text" id="kdl-template-name-input" placeholder="New template name..." style="flex-grow: 1;">
+                    <button id="kdl-template-save-btn" style="padding: 5px 10px; background-color: #28a745; color: white; border: none; border-radius: 4px;">Save Current</button>
+                </div>
+                <small>Save and load templates for the 'Individual Downloads' field above.</small>
+            </div>
+            <!-- КОНЕЦ ВОССТАНОВЛЕННОГО БЛОКА -->
+
+            <h4>Bulk Download Settings</h4>
+            <div class="kdl-setting-item">
+                <label for="kdl-setting-bulkDownloadMode">Bulk Download Mode</label>
+                <select id="kdl-setting-bulkDownloadMode">
+                    <option value="single">One Big Archive</option>
+                    <option value="multiple">Multiple Archives (one per post)</option>
+                </select>
+            </div>
+            <div id="kdl-bulk-single-settings">
+                <div class="kdl-setting-item">
+                    <label for="kdl-setting-bulkSingleSystemPathTemplate"><u>System Path</u> for the Big Archive</label>
+                    <input type="text" id="kdl-setting-bulkSingleSystemPathTemplate">
+                    <small>Name and folder for the single large archive. <b>Example:</b> {author_name}/[Collection] {author_name}.zip</small>
+                </div>
+                <div class="kdl-setting-item">
+                    <label for="kdl-setting-bulkSingleInternalPathTemplate"><u>Internal Structure</u> inside the Big Archive</label>
+                    <input type="text" id="kdl-setting-bulkSingleInternalPathTemplate">
+                    <small>Folder structure inside that archive. <b>Example:</b> {post_date}_{post_title}/{file_index}_{file_name}</small>
+                </div>
+            </div>
+            <div id="kdl-bulk-multiple-settings" style="display:none;">
+                <div class="kdl-setting-item">
+                    <label for="kdl-setting-bulkMultipleSystemPathTemplate"><u>System Path</u> for Multiple Archives</label>
+                    <input type="text" id="kdl-setting-bulkMultipleSystemPathTemplate">
+                    <small>Naming template for each individual archive. <b>Example:</b> {author_name}/{post_date}_{post_title}.zip</small>
+                </div>
+            </div>
+            <small><b>Placeholders:</b> {author_name}, {post_title}, {post_id}, {user_id}, {service}, {post_date}, {file_name}, {file_ext}, {file_name_no_ext}<br>
+                   <b>Counters:</b> {file_index} (per post), {bulk_post_index} (post # in batch), {bulk_file_index} (file # in batch), {post_count} (total posts)</small>
+
+            <!-- Остальные настройки без изменений -->
+            <h3>Visible Buttons</h3>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showZipButton"> Download (ZIP)</label></div>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showImagesButton"> Download Images</label></div>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showFilesButton"> Download Attachments</label></div>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showCopyLinksButton"> Copy Links</label></div>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showShareButton"> Share Links (Mobile)</label></div>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showTranslateButton"> Translate Button</label></div>
+
+            <h3>Downloads</h3>
+            <div class="kdl-setting-item"><label for="kdl-setting-maxConcurrentIndividualDownloads">Max Concurrent "Images/Files" Downloads</label><input type="number" id="kdl-setting-maxConcurrentIndividualDownloads" min="1" max="10"></div>
+            <div class="kdl-setting-item"><label for="kdl-setting-zipFileDownloadTimeout">File Timeout in ZIP (ms)</label><input type="number" id="kdl-setting-zipFileDownloadTimeout" min="10000" step="1000"><small>Time to wait for a single file before retrying.</small></div>
+            <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-enableDownloadRetries"> Enable Download Retries on Failure</label></div>
+            <div class="kdl-setting-item" id="kdl-retry-count-setting"><label for="kdl-setting-downloadRetryCount">Number of Retries</label><input type="number" id="kdl-setting-downloadRetryCount" min="0" max="5"></div>
+            <div class="kdl-setting-item" id="kdl-retry-delay-setting"><label for="kdl-setting-downloadRetryDelay">Delay Between Retries (ms)</label><input type="number" id="kdl-setting-downloadRetryDelay" min="500" step="500"></div>
+
+            <h3>Translation</h3>
+            <div class="kdl-setting-item">
+                <label for="kdl-setting-translationProvider">Translation Provider</label>
+                <select id="kdl-setting-translationProvider">
+                    <option value="none">None</option>
+                    <option value="gemini">Gemini</option>
+                    <option value="deepl">DeepL</option>
+                    <option value="yandex">Yandex (Free)</option>
+                    <option value="google">Google (Free)</option>
+                </select>
+            </div>
+            <div class="kdl-setting-item">
+                <label for="kdl-setting-translationLanguage">Translate to Language</label>
+                <select id="kdl-setting-translationLanguage">${languageOptions}</select>
+            </div>
+            <div id="kdl-gemini-settings" style="display:none;"><h4>Gemini Settings</h4><div class="kdl-setting-item"><label for="kdl-setting-geminiApiKey">Gemini API Key</label><input type="password" id="kdl-setting-geminiApiKey" placeholder="Paste your API key here"></div><div class="kdl-setting-item"><label for="kdl-setting-translationModelName">Model Name</label><input type="text" id="kdl-setting-translationModelName"></div></div>
+            <div id="kdl-deepl-settings" style="display:none;"><h4>DeepL Settings</h4><div class="kdl-setting-item"><label for="kdl-setting-deeplApiKey">DeepL API Key</label><input type="password" id="kdl-setting-deeplApiKey" placeholder="Paste your API key here"></div><div class="kdl-setting-item"><label for="kdl-setting-deeplApiTier">API Tier</label><select id="kdl-setting-deeplApiTier"><option value="free">Free</option><option value="pro">Pro</option></select></div></div>
+
+            <h3>Manage Settings</h3>
+            <div class="kdl-setting-item" style="display: flex; gap: 10px; justify-content: center;">
+                <button id="kdl-export-btn" style="padding: 8px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px;">Export Settings</button>
+                <button id="kdl-import-btn" style="padding: 8px 15px; background-color: #17a2b8; color: white; border: none; border-radius: 4px;">Import Settings</button>
+                <input type="file" id="kdl-import-file-input" accept=".json" style="display: none;">
+            </div>
         </div>
-        <div style="display: flex; gap: 5px; margin-top: 5px;">
-             <input type="text" id="kdl-template-name-input" placeholder="New template name..." style="flex-grow: 1;">
-             <button id="kdl-template-save-btn" style="padding: 5px 10px; background-color: #28a745; color: white; border: none; border-radius: 4px;">Save Current</button>
-        </div>
-    </div>
-    <!-- КОНЕЦ НОВОГО БЛОКА -->
-
-    <h3>Visible Buttons</h3>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showZipButton"> Download (ZIP)</label></div>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showImagesButton"> Download Images</label></div>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showFilesButton"> Download Attachments</label></div>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showCopyLinksButton"> Copy Links</label></div>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showShareButton"> Share Links (Mobile)</label></div>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-showTranslateButton"> Translate Button</label></div>
-
-    <h3>Downloads</h3>
-    <div class="kdl-setting-item"><label for="kdl-setting-maxConcurrentIndividualDownloads">Max Concurrent "Images/Files" Downloads</label><input type="number" id="kdl-setting-maxConcurrentIndividualDownloads" min="1" max="10"></div>
-    <div class="kdl-setting-item"><label for="kdl-setting-zipFileDownloadTimeout">File Timeout in ZIP (ms)</label><input type="number" id="kdl-setting-zipFileDownloadTimeout" min="10000" step="1000"><small>Time to wait for a single file before retrying.</small></div>
-    <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-enableDownloadRetries"> Enable Download Retries on Failure</label></div>
-    <div class="kdl-setting-item" id="kdl-retry-count-setting"><label for="kdl-setting-downloadRetryCount">Number of Retries</label><input type="number" id="kdl-setting-downloadRetryCount" min="0" max="5"></div>
-    <div class="kdl-setting-item" id="kdl-retry-delay-setting"><label for="kdl-setting-downloadRetryDelay">Delay Between Retries (ms)</label><input type="number" id="kdl-setting-downloadRetryDelay" min="500" step="500"></div>
-
-    <h3>Translation</h3>
-    <div class="kdl-setting-item">
-        <label for="kdl-setting-translationProvider">Translation Provider</label>
-        <select id="kdl-setting-translationProvider">
-            <option value="none">None</option>
-            <option value="gemini">Gemini</option>
-            <option value="deepl">DeepL</option>
-            <option value="yandex">Yandex (Free)</option>
-            <option value="google">Google (Free)</option>
-        </select>
-    </div>
-    <div class="kdl-setting-item">
-        <label for="kdl-setting-translationLanguage">Translate to Language</label>
-        <select id="kdl-setting-translationLanguage">${languageOptions}</select>
-    </div>
-    <div id="kdl-gemini-settings" style="display:none;"><h4>Gemini Settings</h4><div class="kdl-setting-item"><label for="kdl-setting-geminiApiKey">Gemini API Key</label><input type="password" id="kdl-setting-geminiApiKey" placeholder="Paste your API key here"></div><div class="kdl-setting-item"><label for="kdl-setting-translationModelName">Model Name</label><input type="text" id="kdl-setting-translationModelName"></div></div>
-    <div id="kdl-deepl-settings" style="display:none;"><h4>DeepL Settings</h4><div class="kdl-setting-item"><label for="kdl-setting-deeplApiKey">DeepL API Key</label><input type="password" id="kdl-setting-deeplApiKey" placeholder="Paste your API key here"></div><div class="kdl-setting-item"><label for="kdl-setting-deeplApiTier">API Tier</label><select id="kdl-setting-deeplApiTier"><option value="free">Free</option><option value="pro">Pro</option></select></div></div>
-
-    <!-- НОВЫЙ БЛОК ДЛЯ ИМПОРТА/ЭКСПОРТА -->
-    <h3>Manage Settings</h3>
-    <div class="kdl-setting-item" style="display: flex; gap: 10px; justify-content: center;">
-        <button id="kdl-export-btn" style="padding: 8px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px;">Export Settings</button>
-        <button id="kdl-import-btn" style="padding: 8px 15px; background-color: #17a2b8; color: white; border: none; border-radius: 4px;">Import Settings</button>
-        <input type="file" id="kdl-import-file-input" accept=".json" style="display: none;">
-    </div>
-    <!-- КОНЕЦ НОВОГО БЛОКА -->
-</div>
-<div class="kdl-settings-actions"><button class="kdl-close">Close</button><button class="kdl-save">Save</button></div>
-`;
+        <div class="kdl-settings-actions"><button class="kdl-close">Close</button><button class="kdl-save">Save</button></div>
+        `;
 
 		settingsOverlayElement.appendChild(settingsModalElement);
 		document.body.appendChild(settingsOverlayElement);
+
+        // --- НАЗНАЧАЕМ ВСЕ ОБРАБОТЧИКИ СОБЫТИЙ ЗДЕСЬ, ПОСЛЕ ДОБАВЛЕНИЯ В DOM ---
 		settingsModalElement
 			.querySelector(".kdl-save")
 			.addEventListener("click", saveSettingsFromModal);
+
 		settingsModalElement
 			.querySelector(".kdl-close")
 			.addEventListener("click", () => toggleSettingsModal(false));
+
 		settingsOverlayElement.addEventListener("click", (e) => {
 			if (e.target === settingsOverlayElement) toggleSettingsModal(false);
 		});
+
+        document.getElementById('kdl-setting-bulkDownloadMode').addEventListener('change', (e) => {
+			const isSingleMode = e.target.value === 'single';
+			document.getElementById('kdl-bulk-single-settings').style.display = isSingleMode ? 'block' : 'none';
+			document.getElementById('kdl-bulk-multiple-settings').style.display = isSingleMode ? 'none' : 'block';
+		});
+
 		document
 			.getElementById("kdl-setting-translationProvider")
 			.addEventListener("change", toggleTranslatorSettingsVisibility);
+
 		document
 			.getElementById("kdl-setting-enableDownloadRetries")
 			.addEventListener("change", toggleRetrySettingsVisibility);
-
-		const templateSelect = document.getElementById("kdl-template-select");
-		const templateNameInput = document.getElementById(
-			"kdl-template-name-input",
-		);
+            
+        // --- ОБРАБОТЧИКИ ДЛЯ ВОССТАНОВЛЕННОГО БЛОКА ШАБЛОНОВ ---
+        const templateSelect = document.getElementById("kdl-template-select");
+		const templateNameInput = document.getElementById("kdl-template-name-input");
 		const templateSaveBtn = document.getElementById("kdl-template-save-btn");
-		const templateDeleteBtn = document.getElementById(
-			"kdl-template-delete-btn",
-		);
-		const fileNameTemplateInput = document.getElementById(
-			"kdl-setting-fileNameTemplate",
-		);
+		const templateDeleteBtn = document.getElementById("kdl-template-delete-btn");
+		const fileNameTemplateInput = document.getElementById("kdl-setting-fileNameTemplate");
 
 		templateSelect.addEventListener("change", () => {
 			if (templateSelect.value) {
@@ -2035,9 +2456,9 @@
 				showMessage("Please provide a name and a template pattern.", "warning");
 				return;
 			}
-			if (!settings.savedFileNameTemplates)
+			if (!settings.savedFileNameTemplates) {
 				settings.savedFileNameTemplates = [];
-
+            }
 			const existingIndex = settings.savedFileNameTemplates.findIndex(
 				(t) => t.name === name,
 			);
@@ -2053,12 +2474,11 @@
 
 		templateDeleteBtn.addEventListener("click", () => {
 			const selectedIndex = templateSelect.selectedIndex;
-			if (selectedIndex < 1) {
+			if (selectedIndex < 1) { // 0 is the placeholder
 				showMessage("Select a template to delete first.", "warning");
 				return;
 			}
-			const templateNameToDelete =
-				templateSelect.options[selectedIndex].dataset.name;
+			const templateNameToDelete = templateSelect.options[selectedIndex].dataset.name;
 			settings.savedFileNameTemplates = settings.savedFileNameTemplates.filter(
 				(t) => t.name !== templateNameToDelete,
 			);
@@ -2069,10 +2489,12 @@
 		document
 			.getElementById("kdl-export-btn")
 			.addEventListener("click", exportSettings);
+
 		const importFileInput = document.getElementById("kdl-import-file-input");
 		document
 			.getElementById("kdl-import-btn")
 			.addEventListener("click", () => importFileInput.click());
+
 		importFileInput.addEventListener("change", (event) => {
 			const file = event.target.files[0];
 			if (!file) return;
@@ -2083,7 +2505,7 @@
 		});
 	}
 
-	function updateSettingsModalUI() {
+function updateSettingsModalUI() {
 		if (!settingsModalElement) return;
 		for (const key in settings) {
 			const element = document.getElementById(`kdl-setting-${key}`);
@@ -2093,13 +2515,10 @@
 			}
 		}
 
+		// ЭТОТ БЛОК ТЕПЕРЬ БУДЕТ РАБОТАТЬ ПРАВИЛЬНО
 		const templateSelect = document.getElementById("kdl-template-select");
-		templateSelect.innerHTML =
-			'<option value="">-- Select a template --</option>';
-		if (
-			settings.savedFileNameTemplates &&
-			settings.savedFileNameTemplates.length > 0
-		) {
+		templateSelect.innerHTML = '<option value="">-- Load a saved template --</option>';
+		if (settings.savedFileNameTemplates && settings.savedFileNameTemplates.length > 0) {
 			settings.savedFileNameTemplates.forEach((item) => {
 				const option = document.createElement("option");
 				option.textContent = item.name;
@@ -2108,6 +2527,11 @@
 				templateSelect.appendChild(option);
 			});
 		}
+
+		const bulkMode = settings.bulkDownloadMode || 'single';
+    	const isSingleMode = bulkMode === 'single';
+    	document.getElementById('kdl-bulk-single-settings').style.display = isSingleMode ? 'block' : 'none';
+    	document.getElementById('kdl-bulk-multiple-settings').style.display = isSingleMode ? 'none' : 'block';
 
 		toggleTranslatorSettingsVisibility();
 		toggleRetrySettingsVisibility();
