@@ -1,13 +1,17 @@
 // ==UserScript==
 // @name         Kemono UI Refactor
 // @namespace    http://tampermonkey.net/
-// @version      4.0
-// @description  A small (no longer) script to improve interaction with Kemono UI.
+// @version      4.1
+// @description  FIX: Rewrote the embed link processing function to be less destructive. It no longer strips all <br> tags from the post content, preserving original text formatting and line breaks.
 // @author       Gemini (AI Developer) & bropines
+// @icon         https://kemono.cr/static/favicon.ico
 // @match        *://kemono.cr/*
 // @grant        GM_addStyle
 // @grant        GM_getValue
 // @grant        GM_setValue
+// @grant        GM_getResourceText
+// @require      https://cdn.plyr.io/3.7.8/plyr.js
+// @resource     plyrCSS https://cdn.plyr.io/3.7.8/plyr.css
 // ==/UserScript==
 
 (function () {
@@ -345,6 +349,8 @@
 
 	// --- MODULE: STYLE INJECTION --- //
 	function injectStyles() {
+		const plyrStyles = GM_getResourceText('plyrCSS');
+		GM_addStyle(plyrStyles);
 		GM_addStyle(`
         /* Основные стили */
         #kui-settings-btn-sidebar { cursor: pointer; }
@@ -827,16 +833,28 @@
 			}
 		},
 		handleGlobalKeys(e) {
-			if (
-				lightboxModule.isActive || ["INPUT", "TEXTAREA"].includes(e.target.tagName)
-			) {
+			// Эта часть остается без изменений
+			if (lightboxModule.isActive || ['INPUT', 'TEXTAREA'].includes(e.target.tagName)) {
 				return;
 			}
-			const gallery = document.querySelector(".kui-gallery-layout");
-			if (gallery && typeof gallery.navigate === "function") {
+
+			// --- НАЧАЛО ИЗМЕНЕНИЙ ---
+			// Проверяем, находится ли фокус внутри плеера Plyr.
+			// Плеер всегда имеет класс '.plyr', что делает проверку надежной.
+			const activeElement = document.activeElement;
+			if (activeElement && activeElement.closest('.plyr')) {
+				// Если да, то ничего не делаем и позволяем плееру самому обработать нажатие.
+				return;
+			}
+			// --- КОНЕЦ ИЗМЕНЕНИЙ ---
+
+			// Эта логика для галереи изображений теперь будет срабатывать,
+			// только если фокус НЕ на видеоплеере.
+			const gallery = document.querySelector('.kui-gallery-layout');
+			if (gallery && typeof gallery.navigate === 'function') {
 				let direction = 0;
-				if (e.key === "ArrowLeft") direction = -1;
-				if (e.key === "ArrowRight") direction = 1;
+				if (e.key === 'ArrowLeft') direction = -1;
+				if (e.key === 'ArrowRight') direction = 1;
 				if (direction !== 0) {
 					e.preventDefault();
 					e.stopImmediatePropagation();
@@ -1040,73 +1058,91 @@
 			}
 			postBody.classList.add("kui-processed");
 		},
-		initializeVideoGallery() {
+		async initializeVideoGallery() {
 			const videoSection = document.querySelector(SELECTORS.videoSection);
-			if (
-				!videoSection ||
-				videoSection.classList.contains("kui-video-gallery-processed")
-			)
-				return;
-			const originalList = videoSection.querySelector("ul");
+			if (!videoSection || videoSection.classList.contains('kui-video-gallery-processed')) return;
+			const originalList = videoSection.querySelector('ul');
 			if (!originalList) return;
-			const videosData = Array.from(originalList.querySelectorAll("li"))
-				.map((item) => ({
-					title: item.querySelector("summary")?.textContent || "Untitled Video",
-					src: item.querySelector("video > source")?.src,
-				}))
-				.filter((video) => video.src);
+			const videosData = Array.from(originalList.querySelectorAll('li')).map(item => ({
+				title: item.querySelector('summary')?.textContent || 'Untitled Video',
+				src: item.querySelector('video > source')?.src
+			})).filter(video => video.src);
 
 			if (videosData.length === 0) return;
 
-			videoSection.classList.add("kui-video-gallery-processed");
-			const galleryLayout = document.createElement("div");
-			galleryLayout.className = "kui-video-gallery-layout";
-			const videoList = document.createElement("div");
-			videoList.className = "kui-video-list";
-			const playerArea = document.createElement("div");
-			playerArea.className = "kui-video-player-area";
-			const playerContainer = document.createElement("div");
-			playerContainer.className = "kui-video-player-container";
-			const mainPlayer = document.createElement("video");
-			mainPlayer.id = "kui-main-video-player";
-			mainPlayer.controls = true;
-			mainPlayer.preload = "metadata";
-			const playlistToggle = document.createElement("div");
-			playlistToggle.className = "kui-video-playlist-toggle";
-			playlistToggle.addEventListener("click", () => {
-				videoList.classList.toggle("kui-collapsed");
+			videoSection.classList.add('kui-video-gallery-processed');
+			const galleryLayout = document.createElement('div');
+			galleryLayout.className = 'kui-video-gallery-layout';
+			const videoList = document.createElement('div');
+			videoList.className = 'kui-video-list';
+			const playerArea = document.createElement('div');
+			playerArea.className = 'kui-video-player-area';
+			const playerContainer = document.createElement('div');
+			playerContainer.className = 'kui-video-player-container';
+
+			// Создаем стандартный <video> элемент, как и раньше
+			const mainPlayerElement = document.createElement('video');
+			mainPlayerElement.id = 'kui-main-video-player';
+			mainPlayerElement.preload = 'metadata';
+			// Атрибут 'controls' теперь будет управляться плеером Plyr, но его можно оставить для совместимости
+
+			const playlistToggle = document.createElement('div');
+			playlistToggle.className = 'kui-video-playlist-toggle';
+			playlistToggle.addEventListener('click', () => {
+				videoList.classList.toggle('kui-collapsed');
 			});
 
-			playerContainer.appendChild(mainPlayer);
+			playerContainer.appendChild(mainPlayerElement); // Сначала добавляем элемент в DOM
 			playerContainer.appendChild(playlistToggle);
 			playerArea.appendChild(playerContainer);
 			galleryLayout.appendChild(videoList);
 			galleryLayout.appendChild(playerArea);
 			if (videosData.length <= 1) {
-				videoList.classList.add("kui-collapsed");
+				videoList.classList.add('kui-collapsed');
 			}
 
-			const listItems = [];
+			// --- ИЗМЕНЕНИЕ 1: Инициализация Plyr ---
+			// Теперь, когда элемент <video> в документе, инициализируем Plyr
+			// Мы передаем вторым аргументом объект с настройками, если нужно.
+			const player = new Plyr(mainPlayerElement, {
+				// Пример настроек:
+				tooltips: { controls: true, seek: true },
+				keyboard: { focused: true, global: true },
+				storage: { enabled: true, key: 'kui_plyr' } // Запоминать громкость
+			});
+
+			// --- ИЗМЕНЕНИЕ 2: Адаптация функции смены видео ---
+			let listItems = []; // Перенесли объявление сюда
 			const setActiveVideo = (index) => {
-				mainPlayer.src = videosData[index].src;
-				mainPlayer.load();
-				listItems.forEach((item, idx) =>
-					item.classList.toggle("kui-video-item-active", idx === index),
-				);
+				// Вместо прямого изменения .src, мы используем API плеера Plyr
+				player.source = {
+					type: 'video',
+					title: videosData[index].title,
+					sources: [{
+						src: videosData[index].src,
+						type: 'video/mp4' // Желательно указать тип, если он известен
+					}],
+				};
+
+				// Остальная логика остается прежней
+				listItems.forEach((item, idx) => item.classList.toggle('kui-video-item-active', idx === index));
 			};
+
 			videosData.forEach((video, index) => {
-				const listItem = document.createElement("div");
-				listItem.className = "kui-video-list-item";
+				const listItem = document.createElement('div');
+				listItem.className = 'kui-video-list-item';
 				listItem.textContent = video.title;
 				listItem.title = video.title;
-				listItem.addEventListener("click", () => setActiveVideo(index));
+				listItem.addEventListener('click', () => setActiveVideo(index));
 				videoList.appendChild(listItem);
 				listItems.push(listItem);
 			});
+
 			videoSection.appendChild(galleryLayout);
-			originalList.style.display = "none";
-			setActiveVideo(0);
+			originalList.style.display = 'none';
+			setActiveVideo(0); // Запускаем первое видео
 		},
+
 		async initializeImageGallery() {
 			const oldGallery = document.querySelector(".kui-gallery-layout");
 			if (oldGallery) oldGallery.remove();
@@ -1155,7 +1191,7 @@
 					];
 					allFiles.forEach(
 						(file) =>
-						file?.name && file.path && fileDataMap.set(file.name, file.path),
+							file?.name && file.path && fileDataMap.set(file.name, file.path),
 					);
 				} catch (error) {
 					console.error(
@@ -1245,7 +1281,7 @@
 					actionsContainer.className = "kui-thumb-actions";
 
 					const originalLinkBtn = document.createElement("a");
-					originalLinkBtn.href = fullOriginalPath;ь
+					originalLinkBtn.href = fullOriginalPath;
 					originalLinkBtn.innerHTML = "⤓";
 					originalLinkBtn.title = "Скачать оригинал";
 					originalLinkBtn.target = "_blank";
