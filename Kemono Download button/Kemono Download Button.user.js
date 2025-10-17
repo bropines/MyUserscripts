@@ -1,8 +1,8 @@
 // ==UserScript==
 // @name          Kemono Download Button DEV
 // @namespace     http://tampermonkey.net/
-// @version       5.4
-// @description   Add free translators and improved bulk download logic
+// @version       5.5
+// @description   Boost filter
 // @author        hoami_523 + Gemini (based on user's request) + bropines
 // @match         https://kemono.cr/*
 // @icon          https://kemono.cr/static/favicon.ico
@@ -52,6 +52,7 @@
 		bulkDownloadMode: "single", // 'single' или 'multiple'
 		bulkSingleSystemPathTemplate: "{author_name}/[Kemono] {author_name} - {post_count} posts.zip",
 		bulkSingleInternalPathTemplate: "{post_date}_{post_title}/{file_index}_{file_name}",
+		cacheDurationHours: 24,
 		bulkMultipleSystemPathTemplate: "{author_name}/{post_date}_{post_title}.zip"
 	};
 	let settings = {},
@@ -127,6 +128,68 @@
     padding: 15px 20px; border-top: 1px solid #444; margin-top: auto;
     display: flex; justify-content: space-between; align-items: center;
 }
+	.post-item-preview {
+    width: 64px;
+    height: 64px;
+    object-fit: cover;
+    margin-right: 15px;
+    border-radius: 4px;
+    background-color: #3a3a3a;
+}
+	.post-item-open-link {
+    margin-left: auto; /* Магия, которая прижимает кнопку к правому краю */
+    padding: 4px 8px;
+    font-size: 1.2em;
+    line-height: 1;
+    text-decoration: none;
+    border-radius: 4px;
+    transition: background-color 0.2s;
+    color: #f0f0f0;
+}
+.post-item-open-link:hover {
+    background-color: #4f4f4f;
+}
+
+.user-card, .post-card { position: relative !important; }
+.kdl-quick-fav-btn {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    z-index: 12;
+    background: rgba(20, 20, 20, 0.7);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    border-radius: 5px;
+    width: 28px;
+    height: 28px;
+    font-size: 16px;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s, color 0.2s, opacity 0.2s;
+    opacity: 0;
+    pointer-events: none;
+}
+.user-card:hover .kdl-quick-fav-btn,
+.post-card:hover .kdl-quick-fav-btn {
+    opacity: 0.9;
+    pointer-events: auto;
+}
+.kdl-quick-fav-btn:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+.kdl-quick-fav-btn.kdl-favorited {
+    color: #ffeb3b;
+}
+.kdl-quick-fav-btn:disabled {
+    cursor: wait;
+    color: #888;
+}
+
 `);
 	// --- STYLING END --- //
 
@@ -473,8 +536,8 @@
 			const t = new URL(e.href).pathname.match(/^\/([^/]+)\/user\/([^/]+)/);
 			t &&
 				((l = t[1]),
-				(r = t[2]),
-				"UnknownAuthor" === a && r && (a = sanitizeFilename(r)));
+					(r = t[2]),
+					"UnknownAuthor" === a && r && (a = sanitizeFilename(r)));
 		}
 		if (n?.href) {
 			const t = new URL(n.href).pathname.match(/\/post\/(\d+)/);
@@ -577,12 +640,12 @@
 			return console.error(`API fetch failed for ${t}/${e}/${o}:`, t), null;
 		}
 	}
-async function collectFilesForPost(t, options = {}) {
+	async function collectFilesForPost(t, options = {}) {
 		debugLog("Collecting files for post:", t.postID, "with options:", options);
 		await getSettings();
 
-        // ОПРЕДЕЛЯЕМ ШАБЛОН ДЛЯ ИСПОЛЬЗОВАНИЯ
-        const templateToUse = options.template || settings.fileNameTemplate;
+		// ОПРЕДЕЛЯЕМ ШАБЛОН ДЛЯ ИСПОЛЬЗОВАНИЯ
+		const templateToUse = options.template || settings.fileNameTemplate;
 
 		if (!options.isBulk) {
 			resetMediaCounter();
@@ -607,11 +670,11 @@ async function collectFilesForPost(t, options = {}) {
 				postDate: i,
 				bulk_post_index: options.bulk_post_index,
 			};
-            
-            // Если нужен только postDate (для режима multiple)
-            if (options.noFiles) {
-                return { files: [], originalHTML: "", postDate: i };
-            }
+
+			// Если нужен только postDate (для режима multiple)
+			if (options.noFiles) {
+				return { files: [], originalHTML: "", postDate: i };
+			}
 
 			if (settings.savePostTags) {
 				try {
@@ -759,14 +822,14 @@ async function collectFilesForPost(t, options = {}) {
 			return {
 				files: e,
 				originalHTML: n.content,
-                postDate: i // Возвращаем дату для использования в других функциях
+				postDate: i // Возвращаем дату для использования в других функциях
 			};
 		} catch (t) {
 			console.error("Failed to collect files:", t);
 			return {
 				files: [],
 				originalHTML: "",
-                postDate: null
+				postDate: null
 			};
 		}
 	}
@@ -782,20 +845,20 @@ async function collectFilesForPost(t, options = {}) {
 		(cachedPostFiles = t),
 			(originalPostContentHTML = e),
 			originalPostContentHTML ||
-				(document.querySelector(".post__content")
-					? ((originalPostContentHTML =
-							document.querySelector(".post__content").innerHTML),
-						debugLog(
-							"API did not provide post content. Using content from the page as a fallback.",
-						))
-					: debugLog("Failed to get post content from API and page.")),
+			(document.querySelector(".post__content")
+				? ((originalPostContentHTML =
+					document.querySelector(".post__content").innerHTML),
+					debugLog(
+						"API did not provide post content. Using content from the page as a fallback.",
+					))
+				: debugLog("Failed to get post content from API and page.")),
 			debugLog(
 				`Page data cached with ${t.length} file entries. Content available: ${!!originalPostContentHTML}`,
 			);
 	}
 	// --- DATA FETCHING & PROCESSING END --- //
 
-// --- DOWNLOAD & ACTION LOGIC START --- //
+	// --- DOWNLOAD & ACTION LOGIC START --- //
 
 	const langCodeMap = {
 		auto: "auto",
@@ -913,23 +976,23 @@ async function collectFilesForPost(t, options = {}) {
 
 	async function executeGeminiTranslation(t) {
 		const e = await gmXmlhttpRequestWithRetries({
-				method: "POST",
-				url: `https://generativelanguage.googleapis.com/v1beta/models/${settings.translationModelName}:generateContent?key=${settings.geminiApiKey}`,
-				headers: {
-					"Content-Type": "application/json",
-				},
-				data: JSON.stringify({
-					contents: [
-						{
-							parts: [
-								{
-									text: `You are a professional translator. Translate the following text to ${settings.translationLanguage}. If the text is duplicated in different languages, provide only one version in the target language. Provide only the translated text, without any additional comments or explanations.\n\n${t}`,
-								},
-							],
-						},
-					],
-				}),
+			method: "POST",
+			url: `https://generativelanguage.googleapis.com/v1beta/models/${settings.translationModelName}:generateContent?key=${settings.geminiApiKey}`,
+			headers: {
+				"Content-Type": "application/json",
+			},
+			data: JSON.stringify({
+				contents: [
+					{
+						parts: [
+							{
+								text: `You are a professional translator. Translate the following text to ${settings.translationLanguage}. If the text is duplicated in different languages, provide only one version in the target language. Provide only the translated text, without any additional comments or explanations.\n\n${t}`,
+							},
+						],
+					},
+				],
 			}),
+		}),
 			o = JSON.parse(e.responseText)?.candidates?.[0]?.content?.parts?.[0]
 				?.text;
 		if (!o) throw new Error("Invalid response structure from Gemini.");
@@ -937,9 +1000,9 @@ async function collectFilesForPost(t, options = {}) {
 	}
 	async function executeDeepLTranslation(t) {
 		const e =
-				"pro" === settings.deeplApiTier
-					? "https://api.deepl.com/v2/translate"
-					: "https://api-free.deepl.com/v2/translate",
+			"pro" === settings.deeplApiTier
+				? "https://api.deepl.com/v2/translate"
+				: "https://api-free.deepl.com/v2/translate",
 			o =
 				{
 					russian: "RU",
@@ -976,8 +1039,8 @@ async function collectFilesForPost(t, options = {}) {
 				{ files: n } =
 					o && cachedPostFiles
 						? {
-								files: cachedPostFiles,
-							}
+							files: cachedPostFiles,
+						}
 						: await collectFilesForPost(t, { template: settings.fileNameTemplate });
 			if (0 === n.length) throw new Error("No content to ZIP.");
 			await loadJSZip();
@@ -995,7 +1058,7 @@ async function collectFilesForPost(t, options = {}) {
 			for (const [o, u] of a.entries())
 				c.push(
 					(async () => {
-						for (; d >= settings.maxConcurrentFileDownloadsInZip; )
+						for (; d >= settings.maxConcurrentFileDownloadsInZip;)
 							await new Promise((t) => setTimeout(t, 200));
 						d++;
 						const n = `${t.postID}-${o}`;
@@ -1050,7 +1113,7 @@ async function collectFilesForPost(t, options = {}) {
 		}
 	}
 	async function executeIndividualDownload(t, e) {
-		//activeOperations++, 
+		//activeOperations++,
 		await getSettings();
 		const o = progressManager.createTask(
 			`${t}-${e.postID}`,
@@ -1061,8 +1124,8 @@ async function collectFilesForPost(t, options = {}) {
 				{ files: s } =
 					n && cachedPostFiles
 						? {
-								files: cachedPostFiles,
-							}
+							files: cachedPostFiles,
+						}
 						: await collectFilesForPost(e, { template: settings.fileNameTemplate });
 			let i;
 			if ("Images" === t) i = s.filter((t) => t.isMedia && "url" === t.source);
@@ -1084,47 +1147,47 @@ async function collectFilesForPost(t, options = {}) {
 				o.updateStatus(`Completed: ${l} / Failed: ${r} / Total: ${c}`);
 			d();
 			const u = async (t) => {
-					const e = settings.enableDownloadRetries
-						? settings.downloadRetryCount + 1
-						: 1;
-					for (let o = 0; o < e; o++) {
-						try {
-							return (
-								await new Promise((e, o) => {
-									GM_download({
-										url: t.data,
-										name: t.name,
-										saveAs: !1,
-										onload: e,
-										onerror: (t) => o(new Error(t.error)),
-										ontimeout: () => o(new Error("Timeout")),
-									});
-								}),
-								{
-									success: !0,
-								}
-							);
-						} catch (n) {
-							if (
-								(debugLog(
-									`Attempt ${o + 1}/${e} for ${t.name} failed: ${n.message}`,
-								),
+				const e = settings.enableDownloadRetries
+					? settings.downloadRetryCount + 1
+					: 1;
+				for (let o = 0; o < e; o++) {
+					try {
+						return (
+							await new Promise((e, o) => {
+								GM_download({
+									url: t.data,
+									name: t.name,
+									saveAs: !1,
+									onload: e,
+									onerror: (t) => o(new Error(t.error)),
+									ontimeout: () => o(new Error("Timeout")),
+								});
+							}),
+							{
+								success: !0,
+							}
+						);
+					} catch (n) {
+						if (
+							(debugLog(
+								`Attempt ${o + 1}/${e} for ${t.name} failed: ${n.message}`,
+							),
 								o < e - 1)
-							) {
-								if (settings.downloadRetryDelay > 0)
-									await new Promise((t) =>
-										setTimeout(t, settings.downloadRetryDelay),
-									);
-							} else
-								return {
-									success: !1,
-									error: n,
-								};
-						}
+						) {
+							if (settings.downloadRetryDelay > 0)
+								await new Promise((t) =>
+									setTimeout(t, settings.downloadRetryDelay),
+								);
+						} else
+							return {
+								success: !1,
+								error: n,
+							};
 					}
-				},
+				}
+			},
 				m = async () => {
-					for (; a.length > 0; ) {
+					for (; a.length > 0;) {
 						const t = a.shift();
 						if (t) {
 							const n = await u(t);
@@ -1151,8 +1214,8 @@ async function collectFilesForPost(t, options = {}) {
 			{ files: i } =
 				s && cachedPostFiles
 					? {
-							files: cachedPostFiles,
-						}
+						files: cachedPostFiles,
+					}
 					: await collectFilesForPost(e, { template: settings.fileNameTemplate }),
 			a = i.filter((t) => "url" === t.source);
 		if (0 === a.length) return void showMessage("No links found.", "warning");
@@ -1194,282 +1257,282 @@ async function collectFilesForPost(t, options = {}) {
 		}
 	}
 
-    // --- НАЧАЛО БЛОКА МАССОВОЙ ЗАГРУЗКИ (ПОЛНОСТЬЮ ПЕРЕПИСАН) --- //
-async function executeBulkDownload(postIdsOrEvent = null) {
-        const downloadBtn = document.getElementById("kdl-bulk-download-btn");
-        
-        let postIdsToProcess;
-        // ПРОВЕРКА: Определяем, что нам передали - событие клика или готовый Set с ID
-        if (postIdsOrEvent instanceof Set && postIdsOrEvent.size > 0) {
-            postIdsToProcess = postIdsOrEvent;
-        } else {
-            postIdsToProcess = selectedPostIds;
-        }
+	// --- НАЧАЛО БЛОКА МАССОВОЙ ЗАГРУЗКИ (ПОЛНОСТЬЮ ПЕРЕПИСАН) --- //
+	async function executeBulkDownload(postIdsOrEvent = null) {
+		const downloadBtn = document.getElementById("kdl-bulk-download-btn");
 
-        if (postIdsToProcess.size === 0) {
-            return showMessage("No posts selected.", "warning");
-        }
+		let postIdsToProcess;
+		// ПРОВЕРКА: Определяем, что нам передали - событие клика или готовый Set с ID
+		if (postIdsOrEvent instanceof Set && postIdsOrEvent.size > 0) {
+			postIdsToProcess = postIdsOrEvent;
+		} else {
+			postIdsToProcess = selectedPostIds;
+		}
 
-        if (downloadBtn) downloadBtn.disabled = true;
-        //activeOperations++;
-        updateQueueIndicator();
+		if (postIdsToProcess.size === 0) {
+			return showMessage("No posts selected.", "warning");
+		}
 
-        const sortOrder = document.getElementById("kdl-bulk-sort-order")?.value || 'selection';
-        let postIdsArray = Array.from(postIdsToProcess);
+		if (downloadBtn) downloadBtn.disabled = true;
+		//activeOperations++;
+		updateQueueIndicator();
 
-        if (sortOrder === 'oldest') {
-            postIdsArray.sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
-        } else if (sortOrder === 'newest') {
-            postIdsArray.sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
-        }
+		const sortOrder = document.getElementById("kdl-bulk-sort-order")?.value || 'selection';
+		let postIdsArray = Array.from(postIdsToProcess);
 
-        const authorName = document.querySelector('.user-header__name span[itemprop="name"]')?.textContent.trim() || "UnknownAuthor";
+		if (sortOrder === 'oldest') {
+			postIdsArray.sort((a, b) => parseInt(a, 10) - parseInt(b, 10));
+		} else if (sortOrder === 'newest') {
+			postIdsArray.sort((a, b) => parseInt(b, 10) - parseInt(a, 10));
+		}
 
-        await getSettings();
+		const authorName = document.querySelector('.user-header__name span[itemprop="name"]')?.textContent.trim() || "UnknownAuthor";
 
-        try {
-            if (settings.bulkDownloadMode === 'multiple') {
-                await executeBulkDownloadMultiple(postIdsArray, authorName);
-            } else {
-                await executeBulkDownloadSingle(postIdsArray, authorName);
-            }
-        } catch (error) {
-            console.error("Bulk download execution failed:", error);
-            showMessage("A critical error occurred during bulk download.", "error");
-        } finally {
-            if (downloadBtn) downloadBtn.disabled = false;
-            document.querySelectorAll(".kdl-post-checkbox:checked").forEach((cb) => {
-                if (postIdsToProcess.has(cb.dataset.id)) {
-                    cb.checked = false;
-                }
-            });
+		await getSettings();
 
-            // Обновляем состояние основной кнопки после завершения
-            const bulkBtnOnPage = document.getElementById('kdl-bulk-download-btn');
-            if (bulkBtnOnPage) {
-                selectedPostIds.clear();
-                bulkBtnOnPage.textContent = `Download Selected (0)`;
-                bulkBtnOnPage.disabled = true;
-            }
-            //activeOperations--;
-            updateQueueIndicator();
-        }
-    }
+		try {
+			if (settings.bulkDownloadMode === 'multiple') {
+				await executeBulkDownloadMultiple(postIdsArray, authorName);
+			} else {
+				await executeBulkDownloadSingle(postIdsArray, authorName);
+			}
+		} catch (error) {
+			console.error("Bulk download execution failed:", error);
+			showMessage("A critical error occurred during bulk download.", "error");
+		} finally {
+			if (downloadBtn) downloadBtn.disabled = false;
+			document.querySelectorAll(".kdl-post-checkbox:checked").forEach((cb) => {
+				if (postIdsToProcess.has(cb.dataset.id)) {
+					cb.checked = false;
+				}
+			});
 
-    async function executeBulkDownloadSingle(postIds, authorName) {
-        const task = progressManager.createTask(`bulk-single-${Date.now()}`, `Bulk Archive (${postIds.length} Posts)`);
-        resetMediaCounter();
+			// Обновляем состояние основной кнопки после завершения
+			const bulkBtnOnPage = document.getElementById('kdl-bulk-download-btn');
+			if (bulkBtnOnPage) {
+				selectedPostIds.clear();
+				bulkBtnOnPage.textContent = `Download Selected (0)`;
+				bulkBtnOnPage.disabled = true;
+			}
+			//activeOperations--;
+			updateQueueIndicator();
+		}
+	}
 
-        try {
-            await loadJSZip();
-            const zip = new JSZip();
+	async function executeBulkDownloadSingle(postIds, authorName) {
+		const task = progressManager.createTask(`bulk-single-${Date.now()}`, `Bulk Archive (${postIds.length} Posts)`);
+		resetMediaCounter();
 
-            let htmlIndexString = "";
-            if (settings.addHtmlIndexInZip) {
-                htmlIndexString = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Archive: ${sanitizeFilename(authorName)}</title><style>body{font-family:sans-serif;background-color:#2b2b2b;color:#f0f0f0;padding:20px}.container{max-width:900px;margin:auto;background-color:#333;padding:20px 40px;border-radius:8px}h1{color:#00aeff}h2{color:#e0e0e0}a{color:#87ceeb}</style></head><body><div class="container"><h1>Archive Index</h1><h3>Author: ${sanitizeFilename(authorName)}</h3><p>Total posts: ${postIds.length}</p><hr>`;
-            }
+		try {
+			await loadJSZip();
+			const zip = new JSZip();
 
-            for (let i = 0; i < postIds.length; i++) {
-                const postId = postIds[i];
-                const postCard = document.querySelector(`article.post-card[data-id="${postId}"]`);
-                if (!postCard) continue;
+			let htmlIndexString = "";
+			if (settings.addHtmlIndexInZip) {
+				htmlIndexString = `<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Archive: ${sanitizeFilename(authorName)}</title><style>body{font-family:sans-serif;background-color:#2b2b2b;color:#f0f0f0;padding:20px}.container{max-width:900px;margin:auto;background-color:#333;padding:20px 40px;border-radius:8px}h1{color:#00aeff}h2{color:#e0e0e0}a{color:#87ceeb}</style></head><body><div class="container"><h1>Archive Index</h1><h3>Author: ${sanitizeFilename(authorName)}</h3><p>Total posts: ${postIds.length}</p><hr>`;
+			}
 
-                const postDetails = getPostCardDetails(postCard, authorName);
-                task.updateStatus(`[${i + 1}/${postIds.length}] Fetching: ${postDetails.postTitle}`);
+			for (let i = 0; i < postIds.length; i++) {
+				const postId = postIds[i];
+				const postCard = document.querySelector(`article.post-card[data-id="${postId}"]`);
+				if (!postCard) continue;
 
-                const { files, originalHTML } = await collectFilesForPost(postDetails, {
-                    isBulk: true,
-                    bulk_post_index: i + 1,
-                    template: settings.bulkSingleInternalPathTemplate
-                });
+				const postDetails = getPostCardDetails(postCard, authorName);
+				task.updateStatus(`[${i + 1}/${postIds.length}] Fetching: ${postDetails.postTitle}`);
 
-                if (settings.addHtmlIndexInZip) {
-                    const postLink = postCard.querySelector("a")?.href || "#";
-                    htmlIndexString += `<div class="post-entry"><h2><a href="${postLink}" target="_blank">[${postDetails.postDate || "N/A"}] ${postDetails.postTitle}</a></h2><ul>`;
-                    if (files.length > 0) {
-                        files.forEach(file => {
-                             const sanitizedPath = file.name.split("/").map(part => encodeURIComponent(part)).join("/");
-                             htmlIndexString += `<li><a href="./${sanitizedPath}">${file.name.split("/").pop()}</a></li>`;
-                        });
-                    } else {
-                         htmlIndexString += `<li>No files found.</li>`;
-                    }
-                    htmlIndexString += `</ul></div>`;
-                }
+				const { files, originalHTML } = await collectFilesForPost(postDetails, {
+					isBulk: true,
+					bulk_post_index: i + 1,
+					template: settings.bulkSingleInternalPathTemplate
+				});
 
-                if (files.length === 0) continue;
+				if (settings.addHtmlIndexInZip) {
+					const postLink = postCard.querySelector("a")?.href || "#";
+					htmlIndexString += `<div class="post-entry"><h2><a href="${postLink}" target="_blank">[${postDetails.postDate || "N/A"}] ${postDetails.postTitle}</a></h2><ul>`;
+					if (files.length > 0) {
+						files.forEach(file => {
+							const sanitizedPath = file.name.split("/").map(part => encodeURIComponent(part)).join("/");
+							htmlIndexString += `<li><a href="./${sanitizedPath}">${file.name.split("/").pop()}</a></li>`;
+						});
+					} else {
+						htmlIndexString += `<li>No files found.</li>`;
+					}
+					htmlIndexString += `</ul></div>`;
+				}
 
-                files.forEach(file => {
-                    if (file.source === 'text') zip.file(file.name, file.data);
-                });
+				if (files.length === 0) continue;
 
-                const urlFiles = files.filter(f => f.source === 'url');
-                if (urlFiles.length > 0) {
-                    task.updateStatus(`[${i + 1}/${postIds.length}] Downloading ${urlFiles.length} files for ${postDetails.postTitle}`);
-                    const downloadPromises = [];
-                    let activeFileDownloads = 0;
+				files.forEach(file => {
+					if (file.source === 'text') zip.file(file.name, file.data);
+				});
 
-                    for (const [fileIndex, fileToDownload] of urlFiles.entries()) {
-                         downloadPromises.push((async () => {
-                            while (activeFileDownloads >= settings.maxConcurrentFileDownloadsInZip) {
-                                await new Promise(resolve => setTimeout(resolve, 200));
-                            }
-                            activeFileDownloads++;
+				const urlFiles = files.filter(f => f.source === 'url');
+				if (urlFiles.length > 0) {
+					task.updateStatus(`[${i + 1}/${postIds.length}] Downloading ${urlFiles.length} files for ${postDetails.postTitle}`);
+					const downloadPromises = [];
+					let activeFileDownloads = 0;
 
-                            const fileTaskId = `bulk-${i}-${fileIndex}`;
-                            task.addFile(fileTaskId, fileToDownload.name);
+					for (const [fileIndex, fileToDownload] of urlFiles.entries()) {
+						downloadPromises.push((async () => {
+							while (activeFileDownloads >= settings.maxConcurrentFileDownloadsInZip) {
+								await new Promise(resolve => setTimeout(resolve, 200));
+							}
+							activeFileDownloads++;
 
-                            try {
-                                const response = await gmXmlhttpRequestWithRetries({
-                                    method: "GET", url: fileToDownload.data, responseType: "arraybuffer",
-                                    timeout: settings.zipFileDownloadTimeout,
-                                    onprogress: (e) => {
-                                        if (e.lengthComputable) task.updateFileProgress(fileTaskId, (e.loaded / e.total) * 100);
-                                    }
-                                });
-                                zip.file(fileToDownload.name, response.response);
-                                task.markFileComplete(fileTaskId, true);
-                            } catch (error) {
-                                task.markFileComplete(fileTaskId, false);
-                                zip.file(`failed_${fileToDownload.name.split('/').pop()}`, `Failed to download.\nURL: ${fileToDownload.data}\nError: ${error.message}`);
-                            } finally {
-                                activeFileDownloads--;
-                            }
-                        })());
-                    }
-                    await Promise.all(downloadPromises);
-                }
-            }
+							const fileTaskId = `bulk-${i}-${fileIndex}`;
+							task.addFile(fileTaskId, fileToDownload.name);
 
-            if (settings.addHtmlIndexInZip) {
-                htmlIndexString += `</div></body></html>`;
-                zip.file("_index.html", htmlIndexString);
-            }
+							try {
+								const response = await gmXmlhttpRequestWithRetries({
+									method: "GET", url: fileToDownload.data, responseType: "arraybuffer",
+									timeout: settings.zipFileDownloadTimeout,
+									onprogress: (e) => {
+										if (e.lengthComputable) task.updateFileProgress(fileTaskId, (e.loaded / e.total) * 100);
+									}
+								});
+								zip.file(fileToDownload.name, response.response);
+								task.markFileComplete(fileTaskId, true);
+							} catch (error) {
+								task.markFileComplete(fileTaskId, false);
+								zip.file(`failed_${fileToDownload.name.split('/').pop()}`, `Failed to download.\nURL: ${fileToDownload.data}\nError: ${error.message}`);
+							} finally {
+								activeFileDownloads--;
+							}
+						})());
+					}
+					await Promise.all(downloadPromises);
+				}
+			}
 
-            task.updateStatus(`Zipping ${postIds.length} Posts...`);
-            const finalZipName = formatNameFromTemplate(settings.bulkSingleSystemPathTemplate, {
-                author_name: authorName,
-                post_count: postIds.length
-            });
+			if (settings.addHtmlIndexInZip) {
+				htmlIndexString += `</div></body></html>`;
+				zip.file("_index.html", htmlIndexString);
+			}
 
-            const blob = await zip.generateAsync({ type: "blob" }, (meta) => {
-                task.updateStatus(`Generating final ZIP: ${meta.percent.toFixed(0)}%`);
-            });
+			task.updateStatus(`Zipping ${postIds.length} Posts...`);
+			const finalZipName = formatNameFromTemplate(settings.bulkSingleSystemPathTemplate, {
+				author_name: authorName,
+				post_count: postIds.length
+			});
 
-            GM_download({ url: URL.createObjectURL(blob), name: finalZipName, saveAs: false });
-            task.updateStatus("Complete!");
-        } catch (error) {
-            console.error("Bulk download (single) failed:", error);
-            task.updateStatus(`Error: ${error.message}`);
-        } finally {
-            task.finish();
-        }
-    }
+			const blob = await zip.generateAsync({ type: "blob" }, (meta) => {
+				task.updateStatus(`Generating final ZIP: ${meta.percent.toFixed(0)}%`);
+			});
 
-    async function executeBulkDownloadMultiple(postIds, authorName) {
-        const task = progressManager.createTask(`bulk-multiple-${Date.now()}`, `Bulk Queuing (${postIds.length} Posts)`);
-        task.updateStatus("Adding posts to the download queue...");
+			GM_download({ url: URL.createObjectURL(blob), name: finalZipName, saveAs: false });
+			task.updateStatus("Complete!");
+		} catch (error) {
+			console.error("Bulk download (single) failed:", error);
+			task.updateStatus(`Error: ${error.message}`);
+		} finally {
+			task.finish();
+		}
+	}
 
-        for (let i = 0; i < postIds.length; i++) {
-            const postId = postIds[i];
-            const postCard = document.querySelector(`article.post-card[data-id="${postId}"]`);
-            if (!postCard) continue;
+	async function executeBulkDownloadMultiple(postIds, authorName) {
+		const task = progressManager.createTask(`bulk-multiple-${Date.now()}`, `Bulk Queuing (${postIds.length} Posts)`);
+		task.updateStatus("Adding posts to the download queue...");
 
-            const postDetails = getPostCardDetails(postCard, authorName);
-            const { postDate } = await collectFilesForPost(postDetails, { isBulk: true, noFiles: true });
-            postDetails.postDate = postDate;
+		for (let i = 0; i < postIds.length; i++) {
+			const postId = postIds[i];
+			const postCard = document.querySelector(`article.post-card[data-id="${postId}"]`);
+			if (!postCard) continue;
 
-            addTaskToQueue(
-                'Bulk-Single-Zip',
-                (pd) => downloadPostAsZip(pd),
-                postDetails,
-                null // No specific button for this task
-            );
-            task.updateStatus(`Queued ${i + 1}/${postIds.length} posts...`);
-        }
+			const postDetails = getPostCardDetails(postCard, authorName);
+			const { postDate } = await collectFilesForPost(postDetails, { isBulk: true, noFiles: true });
+			postDetails.postDate = postDate;
 
-        task.updateStatus("All posts queued! Downloads will start based on concurrency settings.");
-        task.finish(3000);
-    }
+			addTaskToQueue(
+				'Bulk-Single-Zip',
+				(pd) => downloadPostAsZip(pd),
+				postDetails,
+				null // No specific button for this task
+			);
+			task.updateStatus(`Queued ${i + 1}/${postIds.length} posts...`);
+		}
 
-    async function downloadPostAsZip(details) {
-        // This is now an action for the queue, so it manages its own activeOperations.
-        // The queue manager handles the concurrency.
-        const postTask = progressManager.createTask(`zip-multi-${details.postID}`, `ZIP: ${details.postTitle}`);
-        try {
-            const { files } = await collectFilesForPost(details, {
-                 isBulk: false, // Each zip is self-contained
-                 template: "{file_index}_{file_name}" // Simple internal structure
-            });
+		task.updateStatus("All posts queued! Downloads will start based on concurrency settings.");
+		task.finish(3000);
+	}
 
-            if (files.length === 0) throw new Error("No content to ZIP.");
+	async function downloadPostAsZip(details) {
+		// This is now an action for the queue, so it manages its own activeOperations.
+		// The queue manager handles the concurrency.
+		const postTask = progressManager.createTask(`zip-multi-${details.postID}`, `ZIP: ${details.postTitle}`);
+		try {
+			const { files } = await collectFilesForPost(details, {
+				isBulk: false, // Each zip is self-contained
+				template: "{file_index}_{file_name}" // Simple internal structure
+			});
 
-            await loadJSZip();
-            const zip = new JSZip();
-            let failedFileCount = 0;
+			if (files.length === 0) throw new Error("No content to ZIP.");
 
-            const urlFiles = files.filter(f => f.source === 'url');
-            postTask.updateStatus(`Downloading ${urlFiles.length} files...`);
+			await loadJSZip();
+			const zip = new JSZip();
+			let failedFileCount = 0;
 
-            files.forEach(file => {
-                if(file.source === 'text') zip.file(file.name, file.data);
-            });
+			const urlFiles = files.filter(f => f.source === 'url');
+			postTask.updateStatus(`Downloading ${urlFiles.length} files...`);
 
-            const downloadPromises = [];
-            let activeFileDownloads = 0;
-            for (const [fileIndex, fileToDownload] of urlFiles.entries()) {
-                 downloadPromises.push((async () => {
-                    while (activeFileDownloads >= settings.maxConcurrentFileDownloadsInZip) {
-                        await new Promise(resolve => setTimeout(resolve, 200));
-                    }
-                    activeFileDownloads++;
-                    const fileTaskId = `multi-${details.postID}-${fileIndex}`;
-                    postTask.addFile(fileTaskId, fileToDownload.name);
+			files.forEach(file => {
+				if (file.source === 'text') zip.file(file.name, file.data);
+			});
 
-                    try {
-                        const response = await gmXmlhttpRequestWithRetries({
-                             method: "GET", url: fileToDownload.data, responseType: "arraybuffer",
-                             timeout: settings.zipFileDownloadTimeout,
-                             onprogress: (e) => {
-                                 if (e.lengthComputable) postTask.updateFileProgress(fileTaskId, (e.loaded / e.total) * 100);
-                             }
-                        });
-                        zip.file(fileToDownload.name, response.response);
-                        postTask.markFileComplete(fileTaskId, true);
-                    } catch (error) {
-                        failedFileCount++;
-                        postTask.markFileComplete(fileTaskId, false);
-                    } finally {
-                        activeFileDownloads--;
-                    }
-                })());
-            }
-            await Promise.all(downloadPromises);
+			const downloadPromises = [];
+			let activeFileDownloads = 0;
+			for (const [fileIndex, fileToDownload] of urlFiles.entries()) {
+				downloadPromises.push((async () => {
+					while (activeFileDownloads >= settings.maxConcurrentFileDownloadsInZip) {
+						await new Promise(resolve => setTimeout(resolve, 200));
+					}
+					activeFileDownloads++;
+					const fileTaskId = `multi-${details.postID}-${fileIndex}`;
+					postTask.addFile(fileTaskId, fileToDownload.name);
 
-            postTask.updateStatus("Zipping...");
+					try {
+						const response = await gmXmlhttpRequestWithRetries({
+							method: "GET", url: fileToDownload.data, responseType: "arraybuffer",
+							timeout: settings.zipFileDownloadTimeout,
+							onprogress: (e) => {
+								if (e.lengthComputable) postTask.updateFileProgress(fileTaskId, (e.loaded / e.total) * 100);
+							}
+						});
+						zip.file(fileToDownload.name, response.response);
+						postTask.markFileComplete(fileTaskId, true);
+					} catch (error) {
+						failedFileCount++;
+						postTask.markFileComplete(fileTaskId, false);
+					} finally {
+						activeFileDownloads--;
+					}
+				})());
+			}
+			await Promise.all(downloadPromises);
 
-            const zipFileName = formatNameFromTemplate(settings.bulkMultipleSystemPathTemplate, {
-                author_name: details.authorName,
-                post_title: details.postTitle,
-                post_id: details.postID,
-                user_id: details.userID,
-                service: details.service,
-                post_date: details.postDate
-            });
+			postTask.updateStatus("Zipping...");
 
-            const blob = await zip.generateAsync({ type: "blob" });
-            GM_download({ url: URL.createObjectURL(blob), name: zipFileName, saveAs: false });
+			const zipFileName = formatNameFromTemplate(settings.bulkMultipleSystemPathTemplate, {
+				author_name: details.authorName,
+				post_title: details.postTitle,
+				post_id: details.postID,
+				user_id: details.userID,
+				service: details.service,
+				post_date: details.postDate
+			});
 
-            postTask.updateStatus(`Complete! ${failedFileCount > 0 ? `(${failedFileCount} fails)`: ''}`);
-        } catch (error) {
-            console.error(`Failed to download post ${details.postID} as ZIP:`, error);
-            postTask.updateStatus(`Error: ${error.message}`);
-            throw error; // Propagate error to queue manager
-        } finally {
-            postTask.finish();
-        }
-    }
-    // --- КОНЕЦ БЛОКА МАССОВОЙ ЗАГРУЗКИ --- //
+			const blob = await zip.generateAsync({ type: "blob" });
+			GM_download({ url: URL.createObjectURL(blob), name: zipFileName, saveAs: false });
+
+			postTask.updateStatus(`Complete! ${failedFileCount > 0 ? `(${failedFileCount} fails)` : ''}`);
+		} catch (error) {
+			console.error(`Failed to download post ${details.postID} as ZIP:`, error);
+			postTask.updateStatus(`Error: ${error.message}`);
+			throw error; // Propagate error to queue manager
+		} finally {
+			postTask.finish();
+		}
+	}
+	// --- КОНЕЦ БЛОКА МАССОВОЙ ЗАГРУЗКИ --- //
 
 
 	async function showFilePickerModal(t) {
@@ -1510,21 +1573,190 @@ async function executeBulkDownload(postIdsOrEvent = null) {
 							`Starting download for ${o.dataset.name.split("/").pop()}`,
 							"info",
 						),
-						GM_download({
-							url: o.dataset.url,
-							name: o.dataset.name,
-							saveAs: !1,
-						}),
-						e.remove());
+							GM_download({
+								url: o.dataset.url,
+								name: o.dataset.name,
+								saveAs: !1,
+							}),
+							e.remove());
 				});
 		} catch (t) {
 			console.error("Error showing file picker:", t),
 				(o.innerHTML = `<h4>Failed to load attachments.</h4><p style="color:#ccc;font-size:0.9em;">${t.message}</p>`);
 		}
 	}
-// --- DOWNLOAD & ACTION LOGIC END --- //
+	// --- DOWNLOAD & ACTION LOGIC END --- //
 
-// --- QUEUE MANAGEMENT START --- //
+// --- FAVORITES MANAGEMENT START --- //
+const favoritedArtists = new Set();
+const favoritedPosts = new Set();
+let favoritesFetched = false;
+
+async function fetchUserFavorites() {
+    if (favoritesFetched) return true; // Уже загрузили, не повторяем
+    await getSettings();
+    if (!settings.sessionCookie) {
+        // Не показываем ошибку здесь, дадим пользователю шанс нажать на кнопку
+        return false;
+    }
+
+    debugLog("Fetching user favorites from API...");
+    try {
+        const [artistsRes, postsRes] = await Promise.all([
+            gmXmlhttpRequestWithRetries({
+                method: 'GET',
+                url: `${window.location.origin}/api/v1/account/favorites?type=artist`,
+                responseType: 'json'
+            }),
+            gmXmlhttpRequestWithRetries({
+                method: 'GET',
+                url: `${window.location.origin}/api/v1/account/favorites?type=post`,
+                responseType: 'json'
+            })
+        ]);
+
+        if (artistsRes.response && Array.isArray(artistsRes.response)) {
+            artistsRes.response.forEach(artist => favoritedArtists.add(`${artist.service}-${artist.id}`));
+        }
+        if (postsRes.response && Array.isArray(postsRes.response)) {
+            postsRes.response.forEach(post => favoritedPosts.add(post.id));
+        }
+
+        favoritesFetched = true;
+        debugLog(`Favorites loaded: ${favoritedArtists.size} artists, ${favoritedPosts.size} posts.`);
+        return true;
+    } catch (error) {
+        if (error.message.includes("Status 401")) {
+             showMessage('Favorites: Auth failed. Check your session cookie.', 'error');
+        } else {
+            console.error('Failed to fetch favorites:', error);
+        }
+        return false;
+    }
+}
+
+async function toggleFavorite(button, type, service, creatorId, postId = null) {
+    await getSettings();
+    if (!settings.sessionCookie) {
+        showMessage("Session cookie is required to manage favorites. Please set it in the script settings.", "error");
+        return;
+    }
+
+    const artistKey = `${service}-${creatorId}`;
+    const isFavorited = (type === 'creator') ? favoritedArtists.has(artistKey) : favoritedPosts.has(postId);
+    const method = isFavorited ? 'DELETE' : 'POST';
+    let apiUrl;
+
+    if (type === 'creator') {
+        apiUrl = `/api/v1/favorites/creator/${service}/${creatorId}`;
+    } else {
+        apiUrl = `/api/v1/favorites/post/${service}/${creatorId}/${postId}`;
+    }
+
+    button.textContent = '⏳';
+    button.disabled = true;
+
+    try {
+        await gmXmlhttpRequestWithRetries({
+            method: method,
+            url: window.location.origin + apiUrl,
+        });
+
+        // Обновляем наш внутренний список и внешний вид
+        if (isFavorited) {
+            if (type === 'creator') favoritedArtists.delete(artistKey);
+            else favoritedPosts.delete(postId);
+        } else {
+            if (type === 'creator') favoritedArtists.add(artistKey);
+            else favoritedPosts.add(postId);
+        }
+        
+        updateCardFavoriteState(button.closest('.user-card, .post-card'), !isFavorited, type);
+        showMessage(`Successfully ${isFavorited ? 'removed from' : 'added to'} favorites!`, "info");
+
+    } catch (error) {
+        console.error('Favorite toggle failed:', error);
+        showMessage('Failed to update favorites. Check console for details.', 'error');
+    } finally {
+        button.textContent = '⭐';
+        button.disabled = false;
+    }
+}
+
+function updateCardFavoriteState(card, isFavorited, type) {
+    if (!card) return;
+    const favBtn = card.querySelector('.kdl-quick-fav-btn');
+
+    if (isFavorited) {
+        if (favBtn) favBtn.classList.add('kdl-favorited');
+        if (type === 'creator') card.classList.add('user-card--fav');
+        else {
+            card.querySelector('.post-card__header')?.classList.add('post-card__header--fav');
+            card.querySelector('.post-card__footer')?.classList.add('post-card__footer--fav');
+        }
+    } else {
+        if (favBtn) favBtn.classList.remove('kdl-favorited');
+        if (type === 'creator') card.classList.remove('user-card--fav');
+        else {
+            card.querySelector('.post-card__header')?.classList.remove('post-card__header--fav');
+            card.querySelector('.post-card__footer')?.classList.remove('post-card__footer--fav');
+        }
+    }
+}
+
+async function injectArtistFavoriteButton(cardNode) {
+    if (cardNode.querySelector('.kdl-quick-fav-btn')) return;
+
+    const service = cardNode.dataset.service;
+    const creatorId = cardNode.dataset.id;
+    if (!service || !creatorId) return;
+    
+    // Используем данные из нашего списка
+    const isFavorited = favoritedArtists.has(`${service}-${creatorId}`);
+    
+    const favBtn = document.createElement('button');
+    favBtn.className = 'kdl-quick-fav-btn';
+    favBtn.innerHTML = '⭐';
+    favBtn.title = 'Toggle Favorite';
+    cardNode.appendChild(favBtn);
+    
+    // Обновляем состояние карточки и кнопки
+    updateCardFavoriteState(cardNode, isFavorited, 'creator');
+
+    favBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleFavorite(favBtn, 'creator', service, creatorId);
+    });
+}
+
+async function injectPostFavoriteButton(cardNode) {
+    if (cardNode.querySelector('.kdl-quick-fav-btn')) return;
+
+    const service = cardNode.dataset.service;
+    const creatorId = cardNode.dataset.user;
+    const postId = cardNode.dataset.id;
+    if (!service || !creatorId || !postId) return;
+
+    const isFavorited = favoritedPosts.has(postId);
+
+    const favBtn = document.createElement('button');
+    favBtn.className = 'kdl-quick-fav-btn';
+    favBtn.innerHTML = '⭐';
+    favBtn.title = 'Toggle Favorite';
+    cardNode.appendChild(favBtn);
+
+    updateCardFavoriteState(cardNode, isFavorited, 'post');
+
+    favBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        toggleFavorite(favBtn, 'post', service, creatorId, postId);
+    });
+}
+// --- FAVORITES MANAGEMENT END --- //
+
+	// --- QUEUE MANAGEMENT START --- //
 	function updateQueueIndicator() {
 		if (queueIndicatorElement)
 			queueIndicatorElement.textContent = `Active: ${activeOperations} / Queue: ${downloadQueue.length}`;
@@ -1536,12 +1768,12 @@ async function executeBulkDownload(postIdsOrEvent = null) {
 
 		isQueueProcessing = true;
 
-		while(downloadQueue.length > 0 && activeOperations < settings.maxConcurrentOperations) {
+		while (downloadQueue.length > 0 && activeOperations < settings.maxConcurrentOperations) {
 			activeOperations++;
 			updateQueueIndicator();
 
 			const task = downloadQueue.shift();
-			
+
 			if (task.buttonElement) {
 				delete task.buttonElement.dataset.isQueued;
 				task.buttonElement.dataset.isDownloading = "true";
@@ -1564,13 +1796,13 @@ async function executeBulkDownload(postIdsOrEvent = null) {
 					}
 					activeOperations--;
 					updateQueueIndicator();
-                    // Рекурсивно вызываем, чтобы проверить, можно ли запустить следующую задачу
-                    // Сбрасываем флаг, чтобы следующая проверка могла начаться
-                    isQueueProcessing = false;
-                    processQueue();
+					// Рекурсивно вызываем, чтобы проверить, можно ли запустить следующую задачу
+					// Сбрасываем флаг, чтобы следующая проверка могла начаться
+					isQueueProcessing = false;
+					processQueue();
 				});
 		}
-        isQueueProcessing = false;
+		isQueueProcessing = false;
 	}
 
 	function addTaskToQueue(type, action, postDetails, buttonElement, originalButtonText) {
@@ -1598,16 +1830,17 @@ async function executeBulkDownload(postIdsOrEvent = null) {
 	// --- QUEUE MANAGEMENT END --- //
 
 	// --- UI CREATION & INJECTION START --- //
-async function handlePageContent() {
+	async function handlePageContent() {
 		try {
 			await getSettings();
 			await loadJSZip();
+			await fetchUserFavorites();
 			cachedPostFiles = null;
 			originalPostContentHTML = null;
 			selectedPostIds.clear();
 			document
 				.querySelectorAll(
-					".kdl-button, .post-card-download-controls, #kdl-bulk-panel, .kdl-post-checkbox, #kdl-author-manager-btn", // Добавил id кнопки сюда для очистки
+					".kdl-button, .post-card-download-controls, #kdl-bulk-panel, .kdl-post-checkbox, #kdl-author-manager-btn, .kdl-quick-fav-btn",
 				)
 				.forEach((el) => el.remove());
 
@@ -1626,14 +1859,14 @@ async function handlePageContent() {
 				fetchAndCachePostData();
 
 			} else if (window.location.pathname.includes("/user/")) {
-                // --- ИЗМЕНЕННЫЙ БЛОК ---
-                const userHeaderActions = document.querySelector('.user-header__actions');
-                if (userHeaderActions) {
-                    const managerBtn = createAuthorManagerButton();
-                    // Вставляем кнопку перед кнопкой "Upload file"
-                    userHeaderActions.prepend(managerBtn);
-                }
-                
+				// --- ИЗМЕНЕННЫЙ БЛОК ---
+				const userHeaderActions = document.querySelector('.user-header__actions');
+				if (userHeaderActions) {
+					const managerBtn = createAuthorManagerButton();
+					// Вставляем кнопку перед кнопкой "Upload file"
+					userHeaderActions.prepend(managerBtn);
+				}
+
 				createBulkDownloadPanel(); // Эта функция создает панель ниже, как и раньше
 				const pageAuthorName =
 					document
@@ -1657,7 +1890,11 @@ async function handlePageContent() {
 							}
 						});
 					});
-                // --- КОНЕЦ ИЗМЕНЕННОГО БЛОКА ---
+				// --- КОНЕЦ ИЗМЕНЕННОГО БЛОКА ---
+			} else if (window.location.pathname.startsWith('/artists') || window.location.pathname.startsWith('/creators')) {
+				document.querySelectorAll('a.user-card[data-id][data-service]').forEach(injectArtistFavoriteButton);
+			} else if (window.location.pathname.startsWith('/posts')) {
+				document.querySelectorAll('article.post-card[data-id][data-user][data-service]').forEach(injectPostFavoriteButton);
 			}
 		} catch (error) {
 			console.error("Error during page content handling:", error);
@@ -2001,89 +2238,150 @@ async function handlePageContent() {
 		cardList.parentElement.insertBefore(panel, cardList);
 	}
 
-function createAuthorManagerButton() {
-        if (document.getElementById('kdl-author-manager-btn')) {
-            return document.getElementById('kdl-author-manager-btn');
-        }
+	function createAuthorManagerButton() {
+		if (document.getElementById('kdl-author-manager-btn')) {
+			return document.getElementById('kdl-author-manager-btn');
+		}
 
 		const managerBtn = document.createElement('button');
 		managerBtn.id = 'kdl-author-manager-btn';
 		managerBtn.textContent = '🗂️ Manage All Posts';
-        // Стилизуем кнопку, чтобы она выглядела как остальные в шапке
-        managerBtn.style.backgroundColor = '#6f42c1';
-        managerBtn.style.color = 'white';
-        managerBtn.style.border = 'none';
-        managerBtn.style.borderRadius = '4px';
-        managerBtn.style.padding = '0 12px';
-        managerBtn.style.height = '32px';
-        managerBtn.style.fontSize = '14px';
-        managerBtn.style.cursor = 'pointer';
+		managerBtn.style.backgroundColor = '#6f42c1';
+		managerBtn.style.color = 'white';
+		managerBtn.style.border = 'none';
+		managerBtn.style.borderRadius = '4px';
+		managerBtn.style.padding = '0 12px';
+		managerBtn.style.height = '32px';
+		managerBtn.style.fontSize = '14px';
+		managerBtn.style.cursor = 'pointer';
 		managerBtn.title = 'Load all posts from this author into a powerful manager with search and bulk selection.';
-		managerBtn.addEventListener('click', launchAuthorManager);
+
+		// --- ИСПРАВЛЕНИЕ ЗДЕСЬ ---
+		// Теперь мы вызываем функцию без аргументов, чтобы forceRefresh был false по умолчанию
+		managerBtn.addEventListener('click', () => launchAuthorManager());
+		// --- КОНЕЦ ИСПРАВЛЕНИЯ ---
 
 		return managerBtn;
 	}
 
-	async function launchAuthorManager() {
+	async function launchAuthorManager(forceRefresh = false) {
 		const overlay = createAuthorManagerModal();
+		overlay.style.display = 'flex';
+
+		await getSettings();
+
 		const listContainer = document.getElementById('kdl-manager-post-list');
-		const header = document.getElementById('kdl-manager-header').querySelector('h3');
+		const title = document.getElementById('kdl-manager-title');
+		const cacheStatus = document.getElementById('kdl-manager-cache-status');
 		const authorName = document.querySelector('.user-header__name span[itemprop="name"]')?.textContent.trim() || "UnknownAuthor";
-		header.textContent = `Loading posts for: ${authorName}`;
-		listContainer.innerHTML = '<p style="text-align:center; padding: 20px;">Fetching all post data, this may take a moment...</p>';
+
+		const pathParts = window.location.pathname.match(/\/([^/]+)\/user\/([^/]+)/);
+		if (!pathParts) return; // Should not happen on user page
+		const service = pathParts[1];
+		const userID = pathParts[2];
+		const cacheKey = `kemono_posts_cache_${service}_${userID}`;
+
+		// 1. Попытка загрузить из кэша
+		if (!forceRefresh && settings.cacheDurationHours > 0) {
+			const cachedData = await GM_getValue(cacheKey, null);
+			if (cachedData && cachedData.postList) {
+				const cacheAgeHours = (Date.now() - cachedData.timestamp) / (1000 * 60 * 60);
+				if (cacheAgeHours < settings.cacheDurationHours) {
+					debugLog(`Using cached post list for ${userID}. Age: ${cacheAgeHours.toFixed(1)}h`);
+					title.textContent = `Manage ${cachedData.postList.length} posts by ${authorName}`;
+					cacheStatus.textContent = `(from cache, updated ${new Date(cachedData.timestamp).toLocaleTimeString()})`;
+					populateManagerList(cachedData.postList);
+					setupManagerEventListeners();
+					return; // Кэш свежий, работа сделана
+				}
+			}
+		}
+
+		// 2. Если кэш не найден, старый или принудительное обновление
+		title.textContent = `Loading posts for: ${authorName}`;
+		cacheStatus.textContent = '';
+		listContainer.innerHTML = '<p style="text-align:center; padding: 20px;">Fetching all post data from API...</p>';
 
 		const allPosts = await fetchAllAuthorPosts();
 
 		if (allPosts.length > 0) {
-			header.textContent = `Manage ${allPosts.length} posts by ${authorName}`;
+			if (settings.cacheDurationHours > 0) {
+				const dataToCache = {
+					timestamp: Date.now(),
+					postList: allPosts
+				};
+				await GM_setValue(cacheKey, dataToCache);
+				debugLog(`Saved ${allPosts.length} posts to cache for ${userID}.`);
+			}
+
+			title.textContent = `Manage ${allPosts.length} posts by ${authorName}`;
 			populateManagerList(allPosts);
-			setupManagerEventListeners(allPosts);
+			setupManagerEventListeners();
 		} else {
-			header.textContent = `Failed to load posts for ${authorName}`;
-			listContainer.innerHTML = '<p style="text-align:center; padding: 20px;">Could not retrieve post list from the API. Check your session cookie or API settings.</p>';
+			title.textContent = `Failed to load posts for ${authorName}`;
+			listContainer.innerHTML = '<p style="text-align:center; padding: 20px;">Could not retrieve post list. Check your session cookie or API settings.</p>';
 		}
 	}
 
 	function createAuthorManagerModal() {
 		let overlay = document.getElementById('kdl-author-manager-overlay');
-        if (overlay) {
-            overlay.style.display = 'flex';
-            return overlay;
-        }
+		if (overlay) {
+			overlay.style.display = 'flex';
+			return overlay;
+		}
 
 		overlay = document.createElement('div');
 		overlay.id = 'kdl-author-manager-overlay';
+		// --- ИЗМЕНЕНИЯ НАЧАЛИСЬ ЗДЕСЬ ---
 		overlay.innerHTML = `
-			<div id="kdl-author-manager-modal">
-				<div id="kdl-manager-header"><h3></h3></div>
-				<div id="kdl-manager-controls">
-					<input type="text" id="kdl-manager-search" placeholder="Search by title...">
-					<button id="kdl-manager-select-all" class="kdl-manager-btn" style="background-color: #007bff;">Select Visible</button>
-					<button id="kdl-manager-deselect-all" class="kdl-manager-btn" style="background-color: #dc3545;">Deselect Visible</button>
-				</div>
-				<div id="kdl-manager-post-list"></div>
-				<div id="kdl-manager-footer">
-					<span id="kdl-manager-counter">Selected: 0</span>
-					<div>
-                        <button id="kdl-manager-download" class="kdl-manager-btn" style="background-color: #28a745;" disabled>Download Selected</button>
-                        <button id="kdl-manager-close" class="kdl-manager-btn" style="background-color: #6c757d;">Close</button>
-                    </div>
-				</div>
-			</div>
-		`;
+        <div id="kdl-author-manager-modal">
+            <div id="kdl-manager-header">
+                <h3 id="kdl-manager-title"></h3>
+                <em id="kdl-manager-cache-status" style="font-size: 0.8em; color: #aaa; margin-left: 10px;"></em>
+            </div>
+            <div id="kdl-manager-controls" style="flex-wrap: wrap;">
+                <button id="kdl-manager-refresh" class="kdl-manager-btn" title="Force Refresh Post List" style="background-color: #17a2b8;">🔄</button>
+                <input type="text" id="kdl-manager-search" placeholder="Search by title...">
+                <select id="kdl-manager-sort" class="kdl-manager-btn" style="padding: 8px 6px;">
+                    <option value="date-desc">Sort: Newest First</option>
+                    <option value="date-asc">Sort: Oldest First</option>
+                    <option value="files-desc">Sort: Most Files</option>
+                    <option value="files-asc">Sort: Fewest Files</option>
+                    <option value="title-asc">Sort: Title (A-Z)</option>
+                    <option value="title-desc">Sort: Title (Z-A)</option>
+                    <option value="files-gt">Filter: More than X files</option>
+                    <option value="files-lt">Filter: Less than X files</option>
+                </select>
+                <!-- НОВЫЕ ЭЛЕМЕНТЫ ДЛЯ ФИЛЬТРАЦИИ -->
+                <div id="kdl-manager-filter-container" style="display: none; align-items: center; gap: 5px;">
+                     <span style="color: #f0f0f0; font-size: 0.9em;">Value:</span>
+                     <input type="number" id="kdl-manager-filter-value" min="0" placeholder="e.g., 5" style="width: 70px; padding: 6px; background-color: #3a3a3a; border: 1px solid #555; border-radius: 4px; color: #f0f0f0;">
+                </div>
+                <button id="kdl-manager-select-all" class="kdl-manager-btn" style="background-color: #007bff;">Select Visible</button>
+                <button id="kdl-manager-deselect-all" class="kdl-manager-btn" style="background-color: #dc3545;">Deselect All</button>
+            </div>
+            <div id="kdl-manager-post-list"></div>
+            <div id="kdl-manager-footer">
+                <span id="kdl-manager-counter">Selected: 0</span>
+                <div>
+                    <button id="kdl-manager-download" class="kdl-manager-btn" style="background-color: #28a745;" disabled>Download Selected</button>
+                    <button id="kdl-manager-close" class="kdl-manager-btn" style="background-color: #6c757d;">Close</button>
+                </div>
+            </div>
+        </div>
+    `;
+		// --- ИЗМЕНЕНИЯ ЗАКОНЧИЛИСЬ ЗДЕСЬ ---
 		document.body.appendChild(overlay);
 
-		const modal = overlay.querySelector('#kdl-author-manager-modal');
-        const closeBtn = overlay.querySelector('#kdl-manager-close');
-
+		const closeBtn = overlay.querySelector('#kdl-manager-close');
 		overlay.addEventListener('click', (e) => {
 			if (e.target === overlay) {
 				overlay.style.display = 'none';
 			}
 		});
-        closeBtn.addEventListener('click', () => {
-            overlay.style.display = 'none';
-        });
+		closeBtn.addEventListener('click', () => {
+			overlay.style.display = 'none';
+		});
 
 		return overlay;
 	}
@@ -2091,10 +2389,10 @@ function createAuthorManagerButton() {
 	async function fetchAllAuthorPosts() {
 		const pathParts = window.location.pathname.match(/\/([^/]+)\/user\/([^/]+)/);
 		if (!pathParts || pathParts.length < 3) {
-            showMessage("Could not determine author ID from URL.", "error");
-            return [];
-        }
-        
+			showMessage("Could not determine author ID from URL.", "error");
+			return [];
+		}
+
 		const service = pathParts[1];
 		const userID = pathParts[2];
 
@@ -2106,7 +2404,7 @@ function createAuthorManagerButton() {
 
 		while (true) {
 			try {
-                task.updateStatus(`Fetching page ${offset / limit + 1}... Found ${allPosts.length} posts.`);
+				task.updateStatus(`Fetching page ${offset / limit + 1}... Found ${allPosts.length} posts.`);
 				const response = await gmXmlhttpRequestWithRetries({
 					method: 'GET',
 					url: `https://kemono.cr/api/v1/${service}/user/${userID}/posts?o=${offset}`,
@@ -2122,19 +2420,19 @@ function createAuthorManagerButton() {
 				offset += limit;
 				await new Promise(res => setTimeout(res, 200)); // Задержка, чтобы не нагружать API
 			} catch (error) {
-                // ИСПРАВЛЕНИЕ: Проверяем, является ли ошибка сигналом конца списка
-                if (error.message.includes("Status 400")) {
-                    debugLog("Reached end of posts (API returned 400). This is a normal exit condition.");
-                } else {
-				    console.error(`Failed to fetch posts at offset ${offset}:`, error);
-				    showMessage('Error fetching full post list. The result may be incomplete.', 'error');
-                    task.updateStatus(`Error fetching posts: ${error.message}`);
-                }
+				// ИСПРАВЛЕНИЕ: Проверяем, является ли ошибка сигналом конца списка
+				if (error.message.includes("Status 400")) {
+					debugLog("Reached end of posts (API returned 400). This is a normal exit condition.");
+				} else {
+					console.error(`Failed to fetch posts at offset ${offset}:`, error);
+					showMessage('Error fetching full post list. The result may be incomplete.', 'error');
+					task.updateStatus(`Error fetching posts: ${error.message}`);
+				}
 				break; // Прерываем цикл в любом случае (либо конец, либо реальная ошибка)
 			}
 		}
-        task.updateStatus(`Complete! Found ${allPosts.length} posts.`);
-        task.finish(3000);
+		task.updateStatus(`Complete! Found ${allPosts.length} posts.`);
+		task.finish(3000);
 		return allPosts;
 	}
 
@@ -2143,19 +2441,43 @@ function createAuthorManagerButton() {
 		const fragment = document.createDocumentFragment();
 
 		posts.forEach(post => {
-			const postDate = post.published ? new Date(post.published).toISOString().split('T') : 'No Date';
+			const postDate = post.published ? new Date(post.published).toISOString().split('T')[0] : 'No Date';
 			const item = document.createElement('div');
 			item.className = 'post-item';
 			item.dataset.id = post.id;
 			item.dataset.title = post.title.toLowerCase();
+			item.dataset.date = post.published || '0'; // Для сортировки по дате
 
+			if (post.content) {
+				item.dataset.content = post.content.toLowerCase();
+			}
+
+			// --- ИЗМЕНЕНИЯ НАЧАЛИСЬ ЗДЕСЬ ---
+			// Считаем общее количество файлов (главный + вложения)
+			const fileCount = (post.file ? 1 : 0) + (post.attachments ? post.attachments.length : 0);
+			item.dataset.files = fileCount; // Сохраняем для сортировки
+
+			let previewHtml = '<div class="post-item-preview"></div>';
+			if (post.file && post.file.path) {
+				const pathParts = post.file.path.split('/').filter(p => p);
+				const fileName = pathParts.pop();
+				const thumbUrl = `https://img.kemono.cr/thumbnail/${pathParts.join('/')}/${fileName}`;
+				previewHtml = `<img src="${thumbUrl}" class="post-item-preview" loading="lazy">`;
+			}
+
+			const postUrl = `https://kemono.cr/${post.service}/user/${post.user}/post/${post.id}`;
+
+			// Добавляем fileCount в отображаемую информацию
 			item.innerHTML = `
-                <input type="checkbox" data-id="${post.id}">
-                <div class="post-item-label">
-                    <span class="post-item-title">${sanitizeFilename(post.title)}</span>
-                    <span class="post-item-date">${postDate} | ID: ${post.id}</span>
-                </div>
-            `;
+            ${previewHtml}
+            <input type="checkbox" data-id="${post.id}">
+            <div class="post-item-label">
+                <span class="post-item-title">${sanitizeFilename(post.title)}</span>
+                <span class="post-item-date">${postDate} | Files: ${fileCount} | ID: ${post.id}</span>
+            </div>
+            <a href="${postUrl}" target="_blank" class="post-item-open-link" title="Open post in new tab">↗️</a>
+        `;
+			// --- ИЗМЕНЕНИЯ ЗАКОНЧИЛИСЬ ЗДЕСЬ ---
 			fragment.appendChild(item);
 		});
 
@@ -2164,71 +2486,185 @@ function createAuthorManagerButton() {
 	}
 
 	function setupManagerEventListeners() {
-        const searchInput = document.getElementById('kdl-manager-search');
-        const selectAllBtn = document.getElementById('kdl-manager-select-all');
-        const deselectAllBtn = document.getElementById('kdl-manager-deselect-all');
-        const downloadBtn = document.getElementById('kdl-manager-download');
-        const counter = document.getElementById('kdl-manager-counter');
-        const listContainer = document.getElementById('kdl-manager-post-list');
+		// Получаем все нужные элементы из DOM
+		const refreshBtn = document.getElementById('kdl-manager-refresh');
+		const searchInput = document.getElementById('kdl-manager-search');
+		const selectAllBtn = document.getElementById('kdl-manager-select-all');
+		const deselectAllBtn = document.getElementById('kdl-manager-deselect-all');
+		const downloadBtn = document.getElementById('kdl-manager-download');
+		const counter = document.getElementById('kdl-manager-counter');
+		const listContainer = document.getElementById('kdl-manager-post-list');
+		const sortSelect = document.getElementById('kdl-manager-sort');
+		// --- НОВЫЕ ЭЛЕМЕНТЫ ---
+		const filterContainer = document.getElementById('kdl-manager-filter-container');
+		const valueInput = document.getElementById('kdl-manager-filter-value');
 
-        const updateCounter = () => {
-            const count = listContainer.querySelectorAll('input[type="checkbox"]:checked').length;
-            counter.textContent = `Selected: ${count}`;
-            downloadBtn.disabled = count === 0;
-        };
+		let lastCheckedIndex = null;
+		const getCheckboxes = () => Array.from(listContainer.querySelectorAll('input[type="checkbox"]'));
 
-        searchInput.addEventListener('input', () => {
-            const searchTerm = searchInput.value.toLowerCase();
-            listContainer.querySelectorAll('.post-item').forEach(item => {
-                const isVisible = item.dataset.title.includes(searchTerm);
-                item.style.display = isVisible ? 'flex' : 'none';
-            });
-        });
+		const updateCounter = () => {
+			const count = getCheckboxes().filter(cb => cb.checked).length;
+			counter.textContent = `Selected: ${count}`;
+			downloadBtn.disabled = count === 0;
+		};
 
-        selectAllBtn.addEventListener('click', () => {
-            listContainer.querySelectorAll('.post-item').forEach(item => {
-                if (item.style.display !== 'none') {
-                    item.querySelector('input[type="checkbox"]').checked = true;
-                }
-            });
-            updateCounter();
-        });
+		// --- ГЛАВНАЯ ОБНОВЛЕННАЯ ФУНКЦИЯ ---
+		const applyFiltersAndSort = () => {
+			const allItems = Array.from(listContainer.querySelectorAll('.post-item'));
+			const searchTerm = searchInput.value.toLowerCase();
+			const sortMethod = sortSelect.value;
+			const filterValue = parseInt(valueInput.value, 10);
 
-        deselectAllBtn.addEventListener('click', () => {
-            listContainer.querySelectorAll('.post-item').forEach(item => {
-                if (item.style.display !== 'none') {
-                     item.querySelector('input[type="checkbox"]').checked = false;
-                }
-            });
-            updateCounter();
-        });
+			let visibleItems = [];
 
-        listContainer.addEventListener('click', (e) => {
-            const target = e.target;
-            if (target.matches('.post-item') || target.closest('.post-item')) {
-                const item = target.closest('.post-item');
-                const checkbox = item.querySelector('input[type="checkbox"]');
-                if (target.tagName !== 'INPUT') {
-                    checkbox.checked = !checkbox.checked;
-                }
-                updateCounter();
-            }
-        });
+			// 1. ФИЛЬТРАЦИЯ: Определяем, какие посты показывать
+			allItems.forEach(item => {
+				const title = item.dataset.title;
+				const postFiles = parseInt(item.dataset.files, 10);
 
-        downloadBtn.addEventListener('click', () => {
-            const selectedIds = new Set();
-            listContainer.querySelectorAll('input[type="checkbox"]:checked').forEach(cb => {
-                selectedIds.add(cb.dataset.id);
-            });
+				// Проверка по поиску
+				const searchMatch = title.includes(searchTerm);
 
-            if (selectedIds.size > 0) {
-                 // Прячем модальное окно и запускаем загрузку
-                document.getElementById('kdl-author-manager-overlay').style.display = 'none';
-                executeBulkDownload(selectedIds);
-            }
-        });
+				// Проверка по количеству файлов
+				let filterMatch = true; // По умолчанию все проходят
+				if (!isNaN(filterValue)) {
+					if (sortMethod === 'files-gt') {
+						filterMatch = postFiles > filterValue;
+					} else if (sortMethod === 'files-lt') {
+						filterMatch = postFiles < filterValue;
+					}
+				}
 
-        updateCounter(); // Initial call
+				// Показываем элемент, только если он прошел все проверки
+				if (searchMatch && filterMatch) {
+					item.style.display = 'flex';
+					visibleItems.push(item);
+				} else {
+					item.style.display = 'none';
+				}
+			});
+
+			// 2. СОРТИРОВКА: Сортируем только видимые элементы
+			visibleItems.sort((a, b) => {
+				// Исключаем фильтрующие опции из логики сортировки
+				const currentSort = (sortMethod.startsWith('files-g') || sortMethod.startsWith('files-l')) ? 'date-desc' : sortMethod;
+
+				switch (currentSort) {
+					case 'date-asc':
+						return a.dataset.date.localeCompare(b.dataset.date);
+					case 'files-desc':
+						return parseInt(b.dataset.files, 10) - parseInt(a.dataset.files, 10);
+					case 'files-asc':
+						return parseInt(a.dataset.files, 10) - parseInt(b.dataset.files, 10);
+					case 'title-asc':
+						return a.dataset.title.localeCompare(b.dataset.title);
+					case 'title-desc':
+						return b.dataset.title.localeCompare(a.dataset.title);
+					case 'date-desc':
+					default:
+						return b.dataset.date.localeCompare(a.dataset.date);
+				}
+			});
+
+			// 3. ПЕРЕРИСОВКА: Вставляем отсортированные элементы обратно
+			const fragment = document.createDocumentFragment();
+			visibleItems.forEach(item => fragment.appendChild(item));
+			listContainer.appendChild(fragment); // appendChild перемещает элементы, дублирования не будет
+		};
+
+		// --- НАЗНАЧЕНИЕ ОБРАБОТЧИКОВ ---
+
+		refreshBtn.addEventListener('click', () => launchAuthorManager(true));
+
+		// Все изменения в контролах теперь вызывают одну функцию
+		searchInput.addEventListener('input', applyFiltersAndSort);
+		valueInput.addEventListener('input', applyFiltersAndSort);
+
+		sortSelect.addEventListener('change', () => {
+			const method = sortSelect.value;
+			// Показываем или скрываем поле для ввода числа
+			if (method === 'files-gt' || method === 'files-lt') {
+				filterContainer.style.display = 'flex';
+			} else {
+				filterContainer.style.display = 'none';
+			}
+			applyFiltersAndSort();
+		});
+
+		selectAllBtn.addEventListener('click', () => {
+			getCheckboxes().forEach(cb => {
+				if (cb.closest('.post-item').style.display !== 'none') {
+					cb.checked = true;
+				}
+			});
+			updateCounter();
+		});
+
+		deselectAllBtn.addEventListener('click', () => {
+			getCheckboxes().forEach(cb => {
+				if (cb.closest('.post-item').style.display !== 'none') {
+					cb.checked = false;
+				}
+			});
+			updateCounter();
+		});
+
+		listContainer.addEventListener('click', (e) => {
+			const target = e.target;
+			if (target.closest('.post-item-open-link')) return;
+
+			const item = target.closest('.post-item');
+			if (!item) return;
+
+			const checkboxes = getCheckboxes();
+			const checkbox = item.querySelector('input[type="checkbox"]');
+			if (!checkbox) return;
+
+			const currentIndex = checkboxes.indexOf(checkbox);
+
+			if (target.tagName !== 'INPUT') {
+				checkbox.checked = !checkbox.checked;
+			}
+
+			if (e.shiftKey && lastCheckedIndex !== null) {
+				const start = Math.min(currentIndex, lastCheckedIndex);
+				const end = Math.max(currentIndex, lastCheckedIndex);
+				const isChecked = checkboxes[lastCheckedIndex].checked;
+				for (let i = start; i <= end; i++) {
+					if (checkboxes[i]) checkboxes[i].checked = isChecked;
+				}
+			}
+
+			lastCheckedIndex = currentIndex;
+			updateCounter();
+		});
+
+		listContainer.addEventListener('auxclick', (e) => {
+			if (e.button !== 1) return;
+			const item = e.target.closest('.post-item');
+			if (!item) return;
+			e.preventDefault();
+			const link = item.querySelector('.post-item-open-link');
+			if (link && link.href) {
+				window.open(link.href, '_blank');
+			}
+		});
+
+		downloadBtn.addEventListener('click', () => {
+			const selectedIds = new Set();
+			getCheckboxes().forEach(cb => {
+				if (cb.checked) {
+					selectedIds.add(cb.dataset.id);
+				}
+			});
+
+			if (selectedIds.size > 0) {
+				document.getElementById('kdl-author-manager-overlay').style.display = 'none';
+				executeBulkDownload(selectedIds);
+			}
+		});
+
+		updateCounter();
 	}
 
 	function injectCheckbox(postCardNode) {
@@ -2309,6 +2745,11 @@ function createAuthorManagerButton() {
             <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostTags"> Add tags.txt to ZIP</label></div>
             <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-savePostComments"> Add comments.txt to ZIP</label></div>
             <div class="kdl-setting-item"><label><input type="checkbox" id="kdl-setting-enableDebugLogging"> Enable Debug Logging (Console)</label></div>
+			<div class="kdl-setting-item">
+				<label for="kdl-setting-cacheDurationHours">Post List Cache Duration (Hours)</label>
+				<input type="number" id="kdl-setting-cacheDurationHours" min="0" step="1">
+				<small>0 = disable caching. How long to store the full post list before re-fetching.</small>
+			</div>
 
             <h3>File Naming & Structure</h3>
             <div class="kdl-setting-item">
@@ -2316,7 +2757,7 @@ function createAuthorManagerButton() {
                 <input type="text" id="kdl-setting-fileNameTemplate">
                 <small>Defines the save path for single files. <b>Example:</b> {author_name}/{post_date}_{post_title}/{file_name}</small>
             </div>
-            
+
             <!-- ВОТ ЭТОТ БЛОК БЫЛ ПОТЕРЯН. Я ЕГО ВОССТАНОВИЛ -->
             <div class="kdl-setting-item">
                 <label for="kdl-template-select">Saved Templates</label>
@@ -2409,7 +2850,7 @@ function createAuthorManagerButton() {
 		settingsOverlayElement.appendChild(settingsModalElement);
 		document.body.appendChild(settingsOverlayElement);
 
-        // --- НАЗНАЧАЕМ ВСЕ ОБРАБОТЧИКИ СОБЫТИЙ ЗДЕСЬ, ПОСЛЕ ДОБАВЛЕНИЯ В DOM ---
+		// --- НАЗНАЧАЕМ ВСЕ ОБРАБОТЧИКИ СОБЫТИЙ ЗДЕСЬ, ПОСЛЕ ДОБАВЛЕНИЯ В DOM ---
 		settingsModalElement
 			.querySelector(".kdl-save")
 			.addEventListener("click", saveSettingsFromModal);
@@ -2422,7 +2863,7 @@ function createAuthorManagerButton() {
 			if (e.target === settingsOverlayElement) toggleSettingsModal(false);
 		});
 
-        document.getElementById('kdl-setting-bulkDownloadMode').addEventListener('change', (e) => {
+		document.getElementById('kdl-setting-bulkDownloadMode').addEventListener('change', (e) => {
 			const isSingleMode = e.target.value === 'single';
 			document.getElementById('kdl-bulk-single-settings').style.display = isSingleMode ? 'block' : 'none';
 			document.getElementById('kdl-bulk-multiple-settings').style.display = isSingleMode ? 'none' : 'block';
@@ -2435,9 +2876,9 @@ function createAuthorManagerButton() {
 		document
 			.getElementById("kdl-setting-enableDownloadRetries")
 			.addEventListener("change", toggleRetrySettingsVisibility);
-            
-        // --- ОБРАБОТЧИКИ ДЛЯ ВОССТАНОВЛЕННОГО БЛОКА ШАБЛОНОВ ---
-        const templateSelect = document.getElementById("kdl-template-select");
+
+		// --- ОБРАБОТЧИКИ ДЛЯ ВОССТАНОВЛЕННОГО БЛОКА ШАБЛОНОВ ---
+		const templateSelect = document.getElementById("kdl-template-select");
 		const templateNameInput = document.getElementById("kdl-template-name-input");
 		const templateSaveBtn = document.getElementById("kdl-template-save-btn");
 		const templateDeleteBtn = document.getElementById("kdl-template-delete-btn");
@@ -2458,7 +2899,7 @@ function createAuthorManagerButton() {
 			}
 			if (!settings.savedFileNameTemplates) {
 				settings.savedFileNameTemplates = [];
-            }
+			}
 			const existingIndex = settings.savedFileNameTemplates.findIndex(
 				(t) => t.name === name,
 			);
@@ -2505,7 +2946,7 @@ function createAuthorManagerButton() {
 		});
 	}
 
-function updateSettingsModalUI() {
+	function updateSettingsModalUI() {
 		if (!settingsModalElement) return;
 		for (const key in settings) {
 			const element = document.getElementById(`kdl-setting-${key}`);
@@ -2529,9 +2970,9 @@ function updateSettingsModalUI() {
 		}
 
 		const bulkMode = settings.bulkDownloadMode || 'single';
-    	const isSingleMode = bulkMode === 'single';
-    	document.getElementById('kdl-bulk-single-settings').style.display = isSingleMode ? 'block' : 'none';
-    	document.getElementById('kdl-bulk-multiple-settings').style.display = isSingleMode ? 'none' : 'block';
+		const isSingleMode = bulkMode === 'single';
+		document.getElementById('kdl-bulk-single-settings').style.display = isSingleMode ? 'block' : 'none';
+		document.getElementById('kdl-bulk-multiple-settings').style.display = isSingleMode ? 'none' : 'block';
 
 		toggleTranslatorSettingsVisibility();
 		toggleRetrySettingsVisibility();
@@ -2590,8 +3031,8 @@ function updateSettingsModalUI() {
 			if (this.session_data) {
 				const isExpired =
 					this.session_data.creation_timestamp +
-						this.session_data.max_age -
-						60 <=
+					this.session_data.max_age -
+					60 <=
 					this._getTimestampSeconds();
 				if (!isExpired) return this.session_data;
 			}
@@ -2787,10 +3228,15 @@ function updateSettingsModalUI() {
 		}
 
 		const currentUrl = window.location.href;
-		const isPostPage = currentUrl.includes("/post/");
-		const isUserPage = currentUrl.includes("/user/");
+		const path = window.location.pathname;
 
-		if (!isPostPage && !isUserPage) {
+		const isPostPage = path.includes("/post/");
+		const isUserPage = path.includes("/user/");
+		const isPostsListPage = path.startsWith('/posts') || path === '/'; // Страница постов И главная страница
+		const isArtistsListPage = path.startsWith('/artists') || path.startsWith('/creators'); // Страницы авторов
+
+		// Выходим, только если это НЕ одна из целевых страниц
+		if (!isPostPage && !isUserPage && !isPostsListPage && !isArtistsListPage) {
 			lastUrl = currentUrl;
 			return;
 		}
